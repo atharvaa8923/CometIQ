@@ -15,6 +15,7 @@ import Analysis from "./pages/gap/Analysis";
 import ForgeEditor from "./pages/forge/ForgeEditor";
 import ForgeHome from "./pages/forge/ForgeHome";
 import ForgeNew from "./pages/forge/ForgeNew";
+import PathHome from "./pages/path/PathHome";
 import GapHome from "./pages/gap/GapHome";
 import NewSyllabus from "./pages/gap/NewSyllabus";
 
@@ -43,7 +44,7 @@ export default function App() {
         <Route path="/forge" element={<Guard roles={["faculty"]}><ForgeHome /></Guard>} />
         <Route path="/forge/new" element={<Guard roles={["faculty"]}><ForgeNew /></Guard>} />
         <Route path="/forge/:id" element={<Guard roles={["faculty"]}><ForgeEditor /></Guard>} />
-        <Route path="/path/*" element={<Guard roles={["student"]}><Soon title="CometPath" step={4} /></Guard>} />
+        <Route path="/path" element={<Guard roles={["student"]}><PathHome /></Guard>} />
         <Route path="/match/*" element={<Guard roles={["student", "employer"]}><Soon title="CometMatch" step={5} /></Guard>} />
         <Route path="/admin/users" element={<Guard roles={["admin"]}><Users /></Guard>} />
         <Route path="/admin/org" element={<Guard roles={["admin"]}><Org /></Guard>} />

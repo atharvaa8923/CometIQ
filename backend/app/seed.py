@@ -97,7 +97,8 @@ def seed_demo(db: Session) -> None:
     # Demo student: MS Business Analytics & AI, two courses done
     prog = db.scalar(select(Program).where(Program.org_id == org.id, Program.name.like("%Business Analytics and Artificial Intelligence%")))
     db.add(StudentProfile(user_id=users["student"].id, program_id=prog.id if prog else None,
-                          concentration_id=prog.concentrations[0].id if prog and prog.concentrations else None,
+                          concentration_id=next((c.id for c in prog.concentrations if "data science" in c.name.lower()),
+                                                prog.concentrations[0].id if prog.concentrations else None) if prog else None,
                           career_goal="Data Scientist", start_term="Fall 2026",
                           headline="MS Business Analytics & AI candidate"))
     if prog:
