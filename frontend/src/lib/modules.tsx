@@ -16,7 +16,7 @@ export const NAV: NavItem[] = [
   ...MODULES,
   { to: "/advising", label: "Advising", icon: <ClipboardCheck className="h-4 w-4" />, roles: ["advisor", "admin"] },
   { to: "/verify", label: "Verifications", icon: <ShieldCheck className="h-4 w-4" />, roles: ["advisor", "admin"] },
-  { to: "/catalog", label: "Knowledge Graph", icon: <Library className="h-4 w-4" />, roles: ["admin", "faculty", "student", "advisor"] },
+  { to: "/catalog", label: "Knowledge Graph", icon: <Library className="h-4 w-4" />, roles: ["admin", "faculty", "student", "advisor", "employer"] },
   { to: "/admin/users", label: "Users", icon: <Users className="h-4 w-4" />, roles: ["admin"] },
   { to: "/admin/org", label: "Organization", icon: <Settings className="h-4 w-4" />, roles: ["admin"] },
 ];

@@ -147,3 +147,30 @@ def test_nebula_summary_with_fixture(client, tokens, monkeypatch):
     assert 3.0 < g["gpa"] < 4.0 and g["distribution"][-1]["grade"] == "W"
     assert r["professors"][0]["name"] == "Ada Lovelace"  # higher GPA ranks first
     nebula._cache.clear()
+
+
+def test_graph_map_privacy_and_structure(client, tokens):
+    def students(role):
+        d = client.get("/api/graph/map", headers=tokens[role]).json()
+        return d, [n for n in d["nodes"] if n["type"] == "student"]
+
+    d, st = students("admin")
+    ids = {n["id"] for n in d["nodes"]}
+    assert d["student_mode"] == "named" and st
+    assert all(e["source"] in ids and e["target"] in ids for e in d["edges"])  # no dangling edges
+    order = {"job": 0, "skill": 1, "course": 2, "student": 3}
+    types = {n["id"]: n["type"] for n in d["nodes"]}
+    assert all(order[types[e["source"]]] < order[types[e["target"]]] for e in d["edges"])  # edges flow left → right
+    d, st = students("faculty")
+    assert d["student_mode"] == "aggregate" and len(st) == 1 and st[0]["ref"] is None  # no names for faculty
+    d, st = students("student")
+    assert d["student_mode"] == "self" and [n["label"] for n in st] in ([], ["You"])
+    # employers only see students who opted in
+    me = client.get("/api/match/me", headers=tokens["student"]).json()
+    client.put("/api/match/me", headers=tokens["student"], json={"headline": me["headline"], "open_to_match": False})
+    _, st = students("employer")
+    assert "Jordan Rivera" not in [n["label"] for n in st]
+    client.put("/api/match/me", headers=tokens["student"], json={"headline": me["headline"], "open_to_match": True})
+    drill = client.get("/api/graph/map?role_family=Data%20Analyst", headers=tokens["admin"]).json()
+    assert all(n["id"].startswith("job:") for n in drill["nodes"] if n["type"] == "job")
+    assert client.get("/api/graph/map?role_family=Astronaut", headers=tokens["admin"]).status_code == 400

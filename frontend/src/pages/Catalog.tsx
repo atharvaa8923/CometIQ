@@ -1,6 +1,7 @@
 import { ExternalLink, Search } from "lucide-react";
 import { useState } from "react";
 import LiveCourse from "../components/LiveCourse";
+import GraphMap from "./GraphMap";
 import { Badge, Card, Modal, PageHeader, Spinner, Tabs } from "../components/ui";
 import { useApi } from "../lib/hooks";
 
@@ -72,7 +73,7 @@ function ProgramView({ id, onCourse }: { id: string; onCourse: (id: string) => v
 }
 
 export default function Catalog() {
-  const [tab, setTab] = useState<"programs" | "courses" | "skills">("programs");
+  const [tab, setTab] = useState<"map" | "programs" | "courses" | "skills">("map");
   const [q, setQ] = useState("");
   const [sel, setSel] = useState<string | null>(null);
   const [course, setCourse] = useState<string | null>(null);
@@ -82,8 +83,9 @@ export default function Catalog() {
 
   return (
     <div>
-      <PageHeader title="Knowledge Graph" subtitle="Programs, courses, prerequisites and skills shared by every module" />
-      <Tabs value={tab} onChange={setTab} tabs={[{ id: "programs", label: "Programs" }, { id: "courses", label: "Courses" }, { id: "skills", label: "Skills" }]} />
+      <PageHeader title="Knowledge Graph" subtitle="Jobs → Skills → Courses → Students: the shared graph behind every module" />
+      <Tabs value={tab} onChange={setTab} tabs={[{ id: "map", label: "Interactive map" }, { id: "programs", label: "Programs" }, { id: "courses", label: "Courses" }, { id: "skills", label: "Skills" }]} />
+      {tab === "map" && <GraphMap />}
       {tab === "programs" && (
         <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
           <Card padded={false} className="max-h-[70vh] overflow-y-auto">
