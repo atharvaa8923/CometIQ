@@ -1,0 +1,47 @@
+BUAN 6356 — Business Analytics with R
+Naveen Jindal School of Management · Spring 2026 · 3 credit hours
+Instructor: Dr. Morgan Lee · Office hours: Tue 2–4 pm (JSOM 2.101)
+
+COURSE DESCRIPTION
+This course introduces the use of R for business analytics. Students learn to import, clean and transform business data, explore it with descriptive statistics and data visualization, and build regression and classification models to support managerial decisions. Emphasis is on reproducible analysis in RStudio with the tidyverse and on communicating results to business stakeholders.
+
+PREREQUISITES
+OPRE 6301 Quantitative Introduction to Risk and Uncertainty in Business (statistics).
+
+LEARNING OBJECTIVES
+By the end of the course students will be able to:
+1. Use R programming and RStudio to import and manipulate data (data wrangling with dplyr and tidyr).
+2. Apply data cleaning techniques to handle missing values, outliers and inconsistent records.
+3. Summarize data using descriptive statistics and probability concepts; conduct hypothesis testing.
+4. Build and interpret linear regression and logistic regression models.
+5. Create effective data visualization with ggplot2 and communicate insights in written reports and presentations.
+6. Apply classification trees and clustering (data mining) to segment customers.
+
+COURSE SCHEDULE
+Week 1: Introduction to business analytics and R programming; RStudio setup
+Week 2: Data structures in R; importing data from Excel and CSV
+Week 3: Data wrangling with dplyr and tidyr; data cleaning
+Week 4: Descriptive statistics and exploratory analysis
+Week 5: Data visualization with ggplot2
+Week 6: Probability distributions and hypothesis testing
+Week 7: Midterm exam
+Week 8: Linear regression
+Week 9: Multiple regression and model diagnostics
+Week 10: Logistic regression for classification
+Week 11: Classification trees and model evaluation
+Week 12: Clustering and customer segmentation
+Week 13: Time series basics and forecasting
+Week 14: Team project work session
+Week 15: Team project presentations
+
+ASSESSMENT
+Homework assignments (5) ........ 30%
+Midterm exam .................... 25%
+Team project (report + presentation) 30%
+Participation ................... 15%
+
+TEAM PROJECT
+Teams of four analyze a real business dataset, build a statistical model, and present recommendations to a panel. Deliverables include a written report and a 15-minute presentation. Teamwork and peer evaluation are part of the grade.
+
+ACADEMIC INTEGRITY
+Students are expected to follow the UTD academic integrity policy. Use of generative AI tools must be disclosed.
