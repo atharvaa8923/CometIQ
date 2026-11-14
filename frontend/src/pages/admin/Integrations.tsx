@@ -33,7 +33,7 @@ export default function Integrations() {
         <div className="grid gap-3 md:grid-cols-3">
           {Object.entries(data.job_sources).map(([k, v]) => (
             <div key={k} className="rounded-lg border border-slate-200 p-3 text-sm">
-              <div className="flex items-center justify-between"><span className="font-semibold capitalize text-slate-800">{k}</span>
+              <div className="flex items-center justify-between"><span className="font-semibold text-slate-800">{({ github: "GitHub lists", adzuna: "Adzuna", usajobs: "USAJobs" } as Record<string, string>)[k] ?? k}</span>
                 {v.enabled ? <span className="chip bg-green-50 text-green-800"><CheckCircle2 className="h-3.5 w-3.5 text-green-600" aria-hidden />On</span> : <span className="chip bg-slate-100 text-slate-600"><XCircle className="h-3.5 w-3.5" aria-hidden />Off</span>}</div>
               <div className="mt-1 text-xs text-slate-500">{v.detail}</div>
               <div className="mt-2 text-xs"><b>{v.open_jobs}</b> open postings</div>

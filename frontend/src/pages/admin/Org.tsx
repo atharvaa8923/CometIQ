@@ -15,11 +15,11 @@ export default function Org() {
   return (
     <div className="space-y-6">
       <PageHeader title={data.name} subtitle={`Workspace /${data.slug} · ${data.plan.toUpperCase()} plan`} />
-      <div className="grid gap-4 md:grid-cols-4">
-        {Object.entries(data.members).map(([r, n]) => <Stat key={r} label={`${r}s`} value={n} />)}
+      <div className="grid gap-4 md:grid-cols-5">
+        {Object.entries(data.members).map(([r, n]) => <Stat key={r} label={{ admin: "Admins", faculty: "Faculty", student: "Students", employer: "Employers", advisor: "Advisors" }[r] ?? r} value={n} />)}
       </div>
       <Card title="Invite people">
-        <p className="mb-3 text-sm text-slate-600">Share this join code. People choose their role (student, faculty or employer) when they register.</p>
+        <p className="mb-3 text-sm text-slate-600">Share this join code. People choose their role (student, faculty, advisor or employer) when they register.</p>
         <div className="flex items-center gap-3">
           <code className="rounded-lg bg-comet-50 px-4 py-2 text-lg font-bold tracking-widest text-comet-800">{data.join_code}</code>
           <button className="btn-ghost btn-sm" onClick={() => { navigator.clipboard.writeText(data.join_code); toast("Join code copied"); }}><Copy className="h-4 w-4" />Copy</button>
