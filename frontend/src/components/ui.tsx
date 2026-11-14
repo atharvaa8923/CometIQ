@@ -1,5 +1,5 @@
 import { Loader2, X } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 export function PageHeader({ title, subtitle, icon, actions, accent = "comet" }: {
   title: string; subtitle?: string; icon?: ReactNode; actions?: ReactNode; accent?: "comet" | "flame" | "navy";
@@ -75,6 +75,12 @@ export function Empty({ icon, title, children }: { icon?: ReactNode; title: stri
 }
 
 export function Modal({ open, onClose, title, children, wide }: { open: boolean; onClose: () => void; title: string; children: ReactNode; wide?: boolean }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 pt-16" onClick={onClose}>

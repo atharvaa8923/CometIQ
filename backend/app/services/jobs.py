@@ -4,7 +4,9 @@ import re
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..data.taxonomy import ROLE_FAMILIES, classify_role
+from ..data.taxonomy import ROLE_FAMILIES, SKILLS, classify_role
+
+CATEGORY_OF = {name: cat for name, cat, _a, _e in SKILLS}
 from ..models import Job, JobSkill
 from . import skills as sk
 
@@ -29,11 +31,32 @@ def extract_job_skills(title: str, description: str, role_family: str | None = N
                 out[name] = "preferred"
             else:
                 out[name] = info.get("importance", "required")
+    _demote_alternatives(req_text, out)
     family = role_family or classify_role(title)
     if len(out) < 3 and family:  # title-only posting: assume the family profile
         for name in ROLE_FAMILIES[family]["skills"]:
             out.setdefault(name, "preferred")
     return out, engine
+
+
+def _demote_alternatives(req_text: str, out: dict[str, str]) -> None:
+    """'Tableau or Power BI': the skill written right after 'or' / '/' becomes preferred (it is an alternative)."""
+    for line in req_text.splitlines():
+        seps = [m.end() for m in re.finditer(r"\s+or\s+|\s*/\s*", line, re.I)]
+        if not seps:
+            continue
+        for name in sk.extract_builtin(line):
+            pos = _first_pos(line, name)
+            if out.get(name) == "required" and any(0 <= pos - e <= 1 for e in seps) and pos > 0:
+                before = [n for n in out if out[n] == "required" and _first_pos(line, n) < pos and CATEGORY_OF.get(n) == CATEGORY_OF.get(name)]
+                if before:
+                    out[name] = "preferred"
+
+
+def _first_pos(line: str, skill: str) -> int:
+    pats = next((p for n, p in sk._matchers() if n == skill), [])
+    hits = [m.start() for p in pats if (m := p.search(line))]
+    return min(hits, default=10_000)
 
 
 def upsert_job(db: Session, data: dict, org_id: str | None = None, employer_id: str | None = None,

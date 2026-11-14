@@ -106,6 +106,34 @@ def seed_demo(db: Session) -> None:
             db.add(StudentCourse(user_id=users["student"].id, course_id=pc.course_id, status="completed", term="Fall 2026"))
     db.flush()
     seed_sample_syllabus(db, org, users["faculty"])
+    seed_match(db, org, users, pw)
+
+
+def seed_match(db: Session, org: Organization, users: dict, pw: str) -> None:
+    from .data.sample_people import DEMO_STUDENT_RESUME, EMPLOYER_JOB, STUDENTS
+
+    def set_resume(prof: StudentProfile, text: str) -> None:
+        found = sk.extract_builtin(text)
+        prof.resume_text, prof.resume_filename = text, "resume.txt"
+        prof.resume_skills = sorted(sk.skill_ids(db, found).values())
+
+    set_resume(db.get(StudentProfile, users["student"].id), DEMO_STUDENT_RESUME)
+    courses = {c.code: c.id for c in db.scalars(select(Course).where(Course.org_id == org.id))}
+    for st in STUDENTS:
+        u = User(org_id=org.id, email=st["email"], full_name=st["name"], role="student", password_hash=pw)
+        db.add(u)
+        db.flush()
+        prog = db.scalar(select(Program).where(Program.org_id == org.id, Program.name.like(f"%{st['program']}%")))
+        conc = next((c.id for c in prog.concentrations if st["conc"] and st["conc"].lower() in c.name.lower()), None) if prog else None
+        prof = StudentProfile(user_id=u.id, program_id=prog.id if prog else None, concentration_id=conc, career_goal=st["goal"],
+                              headline=st["headline"])
+        set_resume(prof, st["resume"])
+        db.add(prof)
+        for code in st["courses"]:
+            if code in courses:
+                db.add(StudentCourse(user_id=u.id, course_id=courses[code], status="completed", term="Fall 2026"))
+    jobsvc.upsert_job(db, {**EMPLOYER_JOB, "company": users["employer"].company, "source": "employer"},
+                      org_id=org.id, employer_id=users["employer"].id)
 
 
 def seed_sample_syllabus(db: Session, org: Organization, owner: User) -> None:
