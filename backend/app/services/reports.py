@@ -80,3 +80,95 @@ def gap_xlsx(syl, ga) -> bytes:
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+# ── CometForge exports ─────────────────────────────────────────────────────────
+def forge_docx(draft) -> bytes:
+    import docx
+    from docx.shared import Pt, RGBColor
+
+    c = draft.content
+    d = docx.Document()
+    st = d.styles["Normal"]
+    st.font.name, st.font.size = "Calibri", Pt(10.5)
+    h = d.add_heading(f"{c.get('course_code', '')} {c['course_title']}".strip(), 0)
+    h.runs[0].font.color.rgb = RGBColor(0x0E, 0x42, 0x31)
+    d.add_paragraph(f"Syllabus draft v{draft.version} · generated with CometForge · {c.get('framework', '')} aligned")
+    d.add_heading("Course description", 1)
+    d.add_paragraph(c["description"])
+    d.add_heading("Learning outcomes", 1)
+    for o in c["learning_outcomes"]:
+        p = d.add_paragraph(style="List Number")
+        p.add_run(f"{o['id']} ").bold = True
+        p.add_run(o["text"] + (" (new)" if o.get("is_new") else ""))
+    d.add_heading("Course schedule", 1)
+    t = d.add_table(rows=1, cols=4)
+    t.style = "Light Grid Accent 1"
+    for cell, txt in zip(t.rows[0].cells, ("Week", "Module", "Topics & activities", "Outcomes")):
+        cell.text = txt
+    for m in c["modules"]:
+        r = t.add_row().cells
+        r[0].text = str(m["week"])
+        r[1].text = m["title"] + (" ★ new" if m.get("is_new") else "")
+        r[2].text = "; ".join(m.get("topics", []) + m.get("activities", []))
+        r[3].text = ", ".join(m.get("outcomes", []))
+    d.add_heading("Assessment", 1)
+    t = d.add_table(rows=1, cols=3)
+    t.style = "Light Grid Accent 1"
+    for cell, txt in zip(t.rows[0].cells, ("Component", "Weight", "Description")):
+        cell.text = txt
+    for a in c["assessments"]:
+        r = t.add_row().cells
+        r[0].text, r[1].text, r[2].text = a["name"], f"{a['weight']}%", a["description"]
+    pr = c["project"]
+    d.add_heading(f"Team project: {pr['title']}", 1)
+    d.add_paragraph(pr["description"])
+    for x in pr.get("deliverables", []):
+        d.add_paragraph(x, style="List Bullet")
+    if c.get("accreditation"):
+        d.add_heading(f"Accreditation alignment ({c.get('framework', '')})", 1)
+        for a in c["accreditation"]:
+            d.add_paragraph(f"{a['standard']}: {', '.join(a['outcomes'])}", style="List Bullet")
+    if c.get("program_goals"):
+        d.add_heading("Program goals", 1)
+        for g in c["program_goals"]:
+            d.add_paragraph(f"{g['goal']}: {', '.join(g['outcomes']) or '—'}", style="List Bullet")
+    if c.get("change_log"):
+        d.add_heading("What changed and why", 1)
+        for x in c["change_log"]:
+            d.add_paragraph(x, style="List Bullet")
+    buf = io.BytesIO()
+    d.save(buf)
+    return buf.getvalue()
+
+
+def forge_pdf(draft) -> bytes:
+    c, ss, buf = draft.content, _styles(), io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=letter, leftMargin=0.7 * inch, rightMargin=0.7 * inch, topMargin=0.6 * inch,
+                            title=f"{c['course_title']} syllabus")
+    el = [Paragraph(f"{c.get('course_code', '')} {c['course_title']}", ss["H"]),
+          Paragraph(f"Syllabus draft v{draft.version} · CometForge · {c.get('framework', '')} aligned", ss["Small"]),
+          Paragraph("Course description", ss["H2c"]), Paragraph(c["description"], ss["BodyText"]),
+          Paragraph("Learning outcomes", ss["H2c"])]
+    el += [Paragraph(f"<b>{o['id']}</b> {o['text']}{' <font color=#e87500>(new)</font>' if o.get('is_new') else ''}", ss["BodyText"])
+           for o in c["learning_outcomes"]]
+    el.append(Paragraph("Course schedule", ss["H2c"]))
+    data = [["Wk", "Module", "Topics & activities", "LOs"]]
+    for m in c["modules"]:
+        data.append([str(m["week"]), Paragraph(("<b>★</b> " if m.get("is_new") else "") + m["title"], ss["Small"]),
+                     Paragraph("; ".join(m.get("topics", []) + m.get("activities", [])), ss["Small"]), Paragraph(", ".join(m.get("outcomes", [])), ss["Small"])])
+    t = Table(data, colWidths=[0.4 * inch, 1.9 * inch, 3.6 * inch, 0.9 * inch], repeatRows=1)
+    t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), GREEN), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                           ("FONTSIZE", (0, 0), (-1, -1), 8.5), ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#cbd5e1")),
+                           ("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    el.append(t)
+    el.append(Paragraph("Assessment", ss["H2c"]))
+    el += [Paragraph(f"<b>{a['name']}</b> — {a['weight']}%: {a['description']}", ss["BodyText"]) for a in c["assessments"]]
+    pr = c["project"]
+    el += [Paragraph(f"Team project: {pr['title']}", ss["H2c"]), Paragraph(pr["description"], ss["BodyText"])]
+    el += [Paragraph(f"• {x}", ss["BodyText"]) for x in pr.get("deliverables", [])]
+    if c.get("accreditation"):
+        el.append(Paragraph(f"Accreditation alignment ({c.get('framework', '')})", ss["H2c"]))
+        el += [Paragraph(f"<b>{a['standard']}</b>: {', '.join(a['outcomes'])}", ss["BodyText"]) for a in c["accreditation"]]
+    doc.build(el)
+    return buf.getvalue()

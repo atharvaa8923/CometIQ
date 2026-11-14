@@ -12,6 +12,9 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Soon from "./pages/Soon";
 import Analysis from "./pages/gap/Analysis";
+import ForgeEditor from "./pages/forge/ForgeEditor";
+import ForgeHome from "./pages/forge/ForgeHome";
+import ForgeNew from "./pages/forge/ForgeNew";
 import GapHome from "./pages/gap/GapHome";
 import NewSyllabus from "./pages/gap/NewSyllabus";
 
@@ -37,7 +40,9 @@ export default function App() {
         <Route path="/gap" element={<Guard roles={["faculty"]}><GapHome /></Guard>} />
         <Route path="/gap/new" element={<Guard roles={["faculty"]}><NewSyllabus /></Guard>} />
         <Route path="/gap/analysis/:id" element={<Guard roles={["faculty"]}><Analysis /></Guard>} />
-        <Route path="/forge/*" element={<Guard roles={["faculty"]}><Soon title="CometForge" step={3} /></Guard>} />
+        <Route path="/forge" element={<Guard roles={["faculty"]}><ForgeHome /></Guard>} />
+        <Route path="/forge/new" element={<Guard roles={["faculty"]}><ForgeNew /></Guard>} />
+        <Route path="/forge/:id" element={<Guard roles={["faculty"]}><ForgeEditor /></Guard>} />
         <Route path="/path/*" element={<Guard roles={["student"]}><Soon title="CometPath" step={4} /></Guard>} />
         <Route path="/match/*" element={<Guard roles={["student", "employer"]}><Soon title="CometMatch" step={5} /></Guard>} />
         <Route path="/admin/users" element={<Guard roles={["admin"]}><Users /></Guard>} />
