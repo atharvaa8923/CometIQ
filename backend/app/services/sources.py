@@ -86,3 +86,25 @@ def parse_csv(data: bytes) -> list[dict]:
                      "employment_type": r.get("employment_type") or None, "role_family": r.get("role_family") or None,
                      "external_id": ext, "source": "csv"})
     return rows
+
+
+def fetch_usajobs(query: str, location: str = "Dallas", limit: int = 50) -> list[dict]:
+    """USAJobs Search API (federal jobs). Docs: https://developer.usajobs.gov/api-reference/get-api-search"""
+    s = get_settings()
+    if not (s.USAJOBS_API_KEY and s.USAJOBS_EMAIL):
+        raise RuntimeError("USAJobs not configured (USAJOBS_API_KEY and USAJOBS_EMAIL)")
+    r = httpx.get("https://data.usajobs.gov/api/search", timeout=30,
+                  params={"Keyword": query, "LocationName": location, "ResultsPerPage": min(limit, 500)},
+                  headers={"Host": "data.usajobs.gov", "User-Agent": s.USAJOBS_EMAIL, "Authorization-Key": s.USAJOBS_API_KEY})
+    r.raise_for_status()
+    out = []
+    for item in (r.json().get("SearchResult") or {}).get("SearchResultItems") or []:
+        d = item.get("MatchedObjectDescriptor") or {}
+        details = (d.get("UserArea") or {}).get("Details") or {}
+        desc = "\n\n".join(x for x in (details.get("JobSummary"), "Required qualifications:\n" + d["QualificationSummary"]
+                                        if d.get("QualificationSummary") else None) if x)
+        out.append({"title": d.get("PositionTitle", ""), "company": d.get("OrganizationName") or d.get("DepartmentName"),
+                    "location": d.get("PositionLocationDisplay"), "description": desc or None,
+                    "url": d.get("PositionURI"), "external_id": str(d.get("PositionID") or item.get("MatchedObjectId")),
+                    "source": "usajobs"})
+    return [x for x in out if x["title"]]

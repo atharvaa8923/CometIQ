@@ -1,4 +1,5 @@
 """CometIQ — one app: REST API under /api and the React frontend at /."""
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -22,13 +23,32 @@ async def lifespan(_: FastAPI):
     if settings.ENV == "production" and (settings.JWT_SECRET == "change-me-in-production" or len(settings.JWT_SECRET) < 32):
         raise RuntimeError("Set a strong JWT_SECRET (32+ characters) before running in production")
     init_db()
+    task = None
+    if settings.JOB_SYNC_ENABLED:
+        from .services.sync import scheduler_loop
+
+        task = asyncio.create_task(scheduler_loop())
     yield
+    if task:
+        task.cancel()
 
 
 app = FastAPI(title="CometIQ API", version="1.0.0", lifespan=lifespan,
               description="AI Intelligence for Education, Skills & Talent")
 app.add_middleware(CORSMiddleware, allow_origins=[o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()],
                    allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+@app.middleware("http")
+async def security_headers(request, call_next):
+    resp = await call_next(request)
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    resp.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    if settings.ENV == "production":
+        resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return resp
+
 
 for r in (auth.router, admin.router, catalog.router, dashboard.router, gap.router, jobs.router, forge.router, path.router, path.advising, match.router, evidence.router):
     app.include_router(r)

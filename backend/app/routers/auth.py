@@ -1,10 +1,12 @@
 import re
 import secrets
+import time
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from ..config import get_settings
 from ..db import get_db
 from ..models import Organization, StudentProfile, User
 from ..schemas import LoginIn, RegisterIn, user_out
@@ -13,11 +15,33 @@ from ..security import audit, create_token, current_user, hash_password, verify_
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
+_failures: dict[tuple[str, str], list[float]] = {}
+WINDOW = 15 * 60
+
+
+def _limited(key: tuple[str, str]) -> bool:
+    now = time.time()
+    hits = [t for t in _failures.get(key, []) if now - t < WINDOW]
+    _failures[key] = hits
+    return len(hits) >= get_settings().LOGIN_RATE_LIMIT
+
+
+@router.get("/public-config")
+def public_config():
+    """Unauthenticated: tells the login page whether demo accounts exist."""
+    return {"demo": get_settings().SEED_DEMO}
+
+
 @router.post("/login")
-def login(body: LoginIn, db: Session = Depends(get_db)):
+def login(body: LoginIn, request: Request, db: Session = Depends(get_db)):
+    key = (request.client.host if request.client else "?", body.email.strip().lower())
+    if _limited(key):
+        raise HTTPException(429, "Too many failed attempts. Try again in 15 minutes.")
     user = db.scalar(select(User).where(func.lower(User.email) == body.email.strip().lower()))
     if not user or not verify_password(body.password, user.password_hash):
+        _failures.setdefault(key, []).append(time.time())
         raise HTTPException(401, "Invalid email or password")
+    _failures.pop(key, None)
     if not user.is_active:
         raise HTTPException(403, "Account disabled")
     audit(db, user, "login")

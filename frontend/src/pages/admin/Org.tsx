@@ -2,6 +2,7 @@ import { Copy } from "lucide-react";
 import { Card, PageHeader, Spinner, Stat } from "../../components/ui";
 import { useApi } from "../../lib/hooks";
 import { useToast } from "../../lib/toast";
+import Integrations from "./Integrations";
 
 interface Org { name: string; slug: string; join_code: string; plan: string; members: Record<string, number> }
 interface Log { id: number; action: string; user: string | null; detail: Record<string, unknown> | null; at: string }
@@ -24,6 +25,7 @@ export default function Org() {
           <button className="btn-ghost btn-sm" onClick={() => { navigator.clipboard.writeText(data.join_code); toast("Join code copied"); }}><Copy className="h-4 w-4" />Copy</button>
         </div>
       </Card>
+      <Integrations />
       <Card title="Audit log" padded={false}>
         <div className="max-h-96 overflow-y-auto">
           <table className="table-base"><thead><tr><th>When</th><th>User</th><th>Action</th><th>Detail</th></tr></thead>

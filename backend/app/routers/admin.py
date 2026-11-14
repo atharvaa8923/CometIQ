@@ -76,3 +76,66 @@ def audit_log(user: User = Depends(admin_only), db: Session = Depends(get_db)):
     rows = db.execute(select(AuditLog, User.email).outerjoin(User, User.id == AuditLog.user_id)
                       .where(AuditLog.org_id == user.org_id).order_by(AuditLog.id.desc()).limit(200)).all()
     return [{"id": a.id, "action": a.action, "user": e, "detail": a.detail, "at": a.created_at} for a, e in rows]
+
+
+# ── Integrations: job sources, AI and Nebula health ───────────────────────────
+from fastapi import BackgroundTasks  # noqa: E402
+
+from ..db import SessionLocal  # noqa: E402
+from ..models import SyncRun  # noqa: E402
+from ..services import ai, nebula  # noqa: E402
+from ..services import sync as syncsvc  # noqa: E402
+
+
+def _run_out(r: SyncRun) -> dict:
+    return {"id": r.id, "trigger": r.trigger, "status": r.status, "results": r.results, "started_at": r.started_at, "finished_at": r.finished_at}
+
+
+@router.get("/integrations")
+def integrations(user: User = Depends(admin_only), db: Session = Depends(get_db)):
+    from ..config import get_settings
+    from ..models import Job
+
+    s = get_settings()
+    counts = dict(db.execute(select(Job.source, func.count()).where(Job.is_open).group_by(Job.source)).all())
+    runs = db.scalars(select(SyncRun).order_by(SyncRun.id.desc()).limit(10))
+    return {"job_sources": {k: {**v, "open_jobs": counts.get(k, 0)} for k, v in syncsvc.configured_sources().items()},
+            "jobs_by_source": counts, "nightly": {"enabled": s.JOB_SYNC_ENABLED, "hour_utc": s.JOB_SYNC_HOUR_UTC,
+                                                  "location": s.JOB_SYNC_LOCATION, "expire_days": s.JOB_EXPIRE_DAYS},
+            "runs": [_run_out(r) for r in runs],
+            "ai": {"enabled": ai.enabled(), "model": s.AI_MODEL}, "nebula": {"enabled": nebula.enabled()}}
+
+
+def _manual_sync(run_id: int) -> None:
+    with SessionLocal() as db:
+        run = db.get(SyncRun, run_id)
+        if run:
+            syncsvc.run_sync(db, run)
+
+
+@router.post("/jobs/sync-now", status_code=202)
+def sync_now(bg: BackgroundTasks, user: User = Depends(admin_only), db: Session = Depends(get_db)):
+    if db.scalar(select(SyncRun.id).where(SyncRun.status == "running")):
+        raise HTTPException(409, "A sync is already running")
+    run = syncsvc.start_run(db, "manual")
+    audit(db, user, "jobs.sync_now")
+    db.commit()
+    bg.add_task(_manual_sync, run.id)
+    return _run_out(run)
+
+
+@router.post("/ai/test")
+def ai_test(user: User = Depends(admin_only)):
+    """One tiny Claude call to confirm the API key works."""
+    from pydantic import BaseModel as _BM
+
+    if not ai.enabled():
+        return {"ok": False, "message": "ANTHROPIC_API_KEY is not set — CometIQ is using its built-in engine."}
+
+    class _Ping(_BM):
+        skills: list[str]
+
+    res = ai.structured("Extract the skills named in the text.", "Text: SQL, Tableau and Python.", _Ping, effort="low", max_tokens=1000)
+    if res is None:
+        return {"ok": False, "message": "Claude call failed — check the server log for the API error (key, model access or network)."}
+    return {"ok": True, "message": f"Claude responded with {len(res.skills)} skills: {', '.join(res.skills)}"}

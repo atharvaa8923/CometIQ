@@ -31,12 +31,35 @@ class Settings(BaseSettings):
     # Optional live job sources
     ADZUNA_APP_ID: str = ""
     ADZUNA_APP_KEY: str = ""
+    USAJOBS_API_KEY: str = ""          # https://developer.usajobs.gov/apirequest/
+    USAJOBS_EMAIL: str = ""            # USAJobs requires the registered email as User-Agent
+    JOB_SYNC_ENABLED: bool = True      # nightly automatic sync
+    JOB_SYNC_HOUR_UTC: int = 7
+    JOB_SYNC_LOCATION: str = "Dallas"
+    JOB_SYNC_PER_QUERY: int = 50
+    JOB_EXPIRE_DAYS: int = 60          # close synced postings older than this
 
-    # Seed demo data on first start
+    # First start: SEED_DEMO=true seeds demo users (public password!) + sample jobs — for demos only.
+    # Production: SEED_DEMO=false seeds the institution + catalog and a bootstrap admin from these variables.
     SEED_DEMO: bool = True
     DEMO_PASSWORD: str = "CometIQ2026!"
+    ORG_NAME: str = "The University of Texas at Dallas"
+    ORG_JOIN_CODE: str = ""
+    BOOTSTRAP_ADMIN_EMAIL: str = ""
+    BOOTSTRAP_ADMIN_PASSWORD: str = ""
+    LOGIN_RATE_LIMIT: int = 10   # failed logins per email+IP per 15 minutes
+
+
+def _normalize_db_url(url: str) -> str:
+    """Render/Railway/Heroku give postgres:// URLs; SQLAlchemy needs an explicit driver."""
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix):]
+    return url
 
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    s = Settings()
+    s.DATABASE_URL = _normalize_db_url(s.DATABASE_URL)
+    return s

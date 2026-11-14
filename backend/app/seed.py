@@ -212,13 +212,50 @@ def seed_sample_syllabus(db: Session, org: Organization, owner: User) -> None:
     gapsvc.analyze(db, syl, "Data Analyst")
 
 
+def seed_production(db: Session) -> None:
+    """Institution + full catalog, no demo users. The first admin comes from BOOTSTRAP_ADMIN_* variables."""
+    import secrets
+
+    s = get_settings()
+    org = Organization(name=s.ORG_NAME, slug="utd" if "Dallas" in s.ORG_NAME else "main",
+                       join_code=(s.ORG_JOIN_CODE or f"COMET-{secrets.token_hex(3).upper()}").upper())
+    db.add(org)
+    db.flush()
+    seed_catalog(db, org)
+    if s.BOOTSTRAP_ADMIN_EMAIL and len(s.BOOTSTRAP_ADMIN_PASSWORD) >= 12:
+        db.add(User(org_id=org.id, email=s.BOOTSTRAP_ADMIN_EMAIL.lower(), full_name="Administrator", role="admin",
+                    password_hash=hash_password(s.BOOTSTRAP_ADMIN_PASSWORD)))
+        log.info("Created bootstrap admin %s", s.BOOTSTRAP_ADMIN_EMAIL)
+    else:
+        log.warning("No bootstrap admin: set BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD (12+ chars) and restart.")
+    log.info("Organization %s ready — join code %s", org.name, org.join_code)
+
+
+def ensure_bootstrap_admin(db: Session) -> None:
+    s = get_settings()
+    if s.SEED_DEMO or not s.BOOTSTRAP_ADMIN_EMAIL or len(s.BOOTSTRAP_ADMIN_PASSWORD) < 12:
+        return
+    db.flush()  # the session doesn't autoflush: make an admin created by seed_production visible
+    if db.scalar(select(User.id).where(func.lower(User.email) == s.BOOTSTRAP_ADMIN_EMAIL.lower())):
+        return
+    org = db.scalar(select(Organization).order_by(Organization.created_at))
+    if org and not db.scalar(select(User.id).where(User.org_id == org.id, User.role == "admin")):
+        db.add(User(org_id=org.id, email=s.BOOTSTRAP_ADMIN_EMAIL.lower(), full_name="Administrator", role="admin",
+                    password_hash=hash_password(s.BOOTSTRAP_ADMIN_PASSWORD)))
+
+
 def init_db() -> None:
     Base.metadata.create_all(engine)
     with SessionLocal() as db:
         sync_skills(db)
-        if get_settings().SEED_DEMO and not db.scalar(select(func.count(Organization.id))):
-            log.info("Seeding demo data…")
-            seed_demo(db)
+        if not db.scalar(select(func.count(Organization.id))):
+            if get_settings().SEED_DEMO:
+                log.info("Seeding demo data…")
+                seed_demo(db)
+            else:
+                log.info("Seeding institution and catalog (production mode)…")
+                seed_production(db)
+        ensure_bootstrap_admin(db)
         db.commit()
 
 

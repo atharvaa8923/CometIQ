@@ -1,0 +1,18 @@
+{
+  "_comment": "Synthetic sample shaped like the USAJobs Search API response (SearchResult.SearchResultItems[].MatchedObjectDescriptor).",
+  "SearchResult": {
+    "SearchResultCount": 2,
+    "SearchResultItems": [
+      {"MatchedObjectId": "800001", "MatchedObjectDescriptor": {
+        "PositionID": "TX-26-0001", "PositionTitle": "Data Analyst", "OrganizationName": "Department of Veterans Affairs",
+        "PositionLocationDisplay": "Dallas, Texas", "PositionURI": "https://www.usajobs.gov/job/800001",
+        "QualificationSummary": "Experience with SQL, Tableau and statistics; strong communication.",
+        "UserArea": {"Details": {"JobSummary": "Analyze program data and build dashboards for leadership."}}}},
+      {"MatchedObjectId": "800002", "MatchedObjectDescriptor": {
+        "PositionID": "TX-26-0002", "PositionTitle": "IT Specialist (INFOSEC)", "DepartmentName": "Department of Homeland Security",
+        "PositionLocationDisplay": "Irving, Texas", "PositionURI": "https://www.usajobs.gov/job/800002",
+        "QualificationSummary": "Knowledge of cybersecurity, NIST frameworks and incident response.",
+        "UserArea": {"Details": {"JobSummary": "Protect agency systems."}}}}
+    ]
+  }
+}

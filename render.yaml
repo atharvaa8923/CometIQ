@@ -1,0 +1,47 @@
+# Render Blueprint — one-click deploy of CometIQ (web app + managed PostgreSQL + HTTPS).
+# Render dashboard → New → Blueprint → pick this repository. Secrets marked sync:false are entered in the dashboard.
+databases:
+  - name: cometiq-db
+    plan: basic-256mb
+    databaseName: cometiq
+    user: cometiq
+
+services:
+  - type: web
+    name: cometiq
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase: { name: cometiq-db, property: connectionString }
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SEED_DEMO
+        value: "false"            # set "true" only for a public demo (demo accounts have a known password)
+      - key: ORG_NAME
+        value: The University of Texas at Dallas
+      - key: BOOTSTRAP_ADMIN_EMAIL
+        sync: false
+      - key: BOOTSTRAP_ADMIN_PASSWORD
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false               # e.g. https://cometiq.yourdomain.edu
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: NEBULA_API_KEY
+        sync: false
+      - key: ADZUNA_APP_ID
+        sync: false
+      - key: ADZUNA_APP_KEY
+        sync: false
+      - key: USAJOBS_API_KEY
+        sync: false
+      - key: USAJOBS_EMAIL
+        sync: false
+      - key: JOB_SYNC_HOUR_UTC
+        value: "7"

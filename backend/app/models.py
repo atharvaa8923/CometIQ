@@ -341,6 +341,18 @@ class PlanReview(Base):
     advisor: Mapped[User | None] = relationship(foreign_keys=[advisor_id])
 
 
+class SyncRun(Base):
+    """One job-market sync. run_key is unique for nightly runs so only one server instance runs it."""
+    __tablename__ = "sync_runs"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_key: Mapped[str | None] = mapped_column(String(60), unique=True)
+    trigger: Mapped[str] = mapped_column(String(20))  # nightly | manual
+    status: Mapped[str] = mapped_column(String(20), default="running")  # running | ok | partial | failed
+    results: Mapped[dict] = mapped_column(JSON, default=dict)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class AuditLog(Base):
     __tablename__ = "audit_log"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
