@@ -1,16 +1,20 @@
+import hashlib
 import re
 import secrets
 import time
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..db import get_db
-from ..models import Organization, StudentProfile, User
+from ..models import Organization, PasswordReset, StudentProfile, User
 from ..schemas import LoginIn, RegisterIn, user_out
 from ..security import audit, create_token, current_user, hash_password, verify_password
+from ..services import tasks
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -51,6 +55,8 @@ def login(body: LoginIn, request: Request, db: Session = Depends(get_db)):
 
 @router.post("/register", status_code=201)
 def register(body: RegisterIn, db: Session = Depends(get_db)):
+    if not body.accept_terms:
+        raise HTTPException(400, "Please accept the privacy notice and terms of use")
     email = body.email.lower()
     if db.scalar(select(User.id).where(func.lower(User.email) == email)):
         raise HTTPException(409, "Email already registered")
@@ -71,6 +77,9 @@ def register(body: RegisterIn, db: Session = Depends(get_db)):
         raise HTTPException(400, "Provide an organization join code or a new organization name")
     user = User(org_id=org.id, email=email, full_name=body.full_name.strip(), role=role,
                 company=body.company, password_hash=hash_password(body.password))
+    from .privacy import POLICY_VERSION
+
+    user.consent_version, user.consent_at = POLICY_VERSION, datetime.now(timezone.utc)
     db.add(user)
     db.flush()
     if role == "student":
@@ -87,13 +96,6 @@ def me(user: User = Depends(current_user)):
 
 
 # ── Password reset & account settings ─────────────────────────────────────────
-import hashlib  # noqa: E402
-from datetime import datetime, timedelta, timezone  # noqa: E402
-
-from pydantic import BaseModel, Field  # noqa: E402
-
-from ..models import PasswordReset  # noqa: E402
-from ..services import tasks  # noqa: E402
 
 
 class ForgotIn(BaseModel):

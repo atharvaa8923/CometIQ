@@ -14,6 +14,7 @@ class RegisterIn(BaseModel):
     join_code: str | None = None       # join an existing organization
     org_name: str | None = None        # or create a new one (you become its admin)
     company: str | None = None
+    accept_terms: bool = False             # privacy notice + terms (required)
 
 
 def user_out(u) -> dict:

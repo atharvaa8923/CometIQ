@@ -27,7 +27,7 @@ export default function Org() {
       </Card>
       <Integrations />
       <Card title="Audit log" padded={false}>
-        <div className="max-h-96 overflow-y-auto">
+        <div className="max-h-96 overflow-y-auto" tabIndex={0} role="region" aria-label="Audit log entries">
           <table className="table-base"><thead><tr><th>When</th><th>User</th><th>Action</th><th>Detail</th></tr></thead>
             <tbody>{logs.data?.map((l) => (
               <tr key={l.id}><td className="whitespace-nowrap text-slate-500">{new Date(l.at).toLocaleString()}</td><td>{l.user ?? "—"}</td>

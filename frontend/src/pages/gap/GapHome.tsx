@@ -39,7 +39,7 @@ export default function GapHome() {
                   <div className="text-xs font-semibold text-flame-600">{s.code ?? "No course code"} {s.semester && `· ${s.semester}`}</div>
                   <div className="font-bold text-comet-900">{s.title}</div>
                 </div>
-                <button className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" onClick={() => del(s)} aria-label={`Delete ${s.title}`}><Trash2 className="h-4 w-4" /></button>
+                <button className="rounded p-1 text-slate-500 hover:bg-red-50 hover:text-red-600" onClick={() => del(s)} aria-label={`Delete ${s.title}`}><Trash2 className="h-4 w-4" /></button>
               </div>
               {s.latest ? (
                 <div className="mt-4">

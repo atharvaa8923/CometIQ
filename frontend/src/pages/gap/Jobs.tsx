@@ -49,7 +49,7 @@ export default function Jobs() {
           <option value="">All role families</option>{meta.data?.role_families.map((r) => <option key={r}>{r}</option>)}</select>
       </div>
       {loading ? <Spinner /> : (
-        <div className="max-h-[60vh] overflow-y-auto">
+        <div className="max-h-[60vh] overflow-y-auto" tabIndex={0} role="region" aria-label="Job postings">
           <table className="table-base"><thead><tr><th>Role</th><th>Family</th><th>Skills extracted</th><th>Source</th></tr></thead>
             <tbody>{data?.items.map((j) => (
               <tr key={j.id}>

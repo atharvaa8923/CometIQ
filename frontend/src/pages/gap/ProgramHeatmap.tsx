@@ -50,7 +50,7 @@ export default function ProgramHeatmap() {
               {[0, 0.5, 1].map((v) => <span key={v} className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-sm ring-1 ring-black/10" style={{ background: HEAT[v] }} />{label(v)}</span>)}
             </div>
           </div>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Program skills heatmap">
             <table className="border-separate" style={{ borderSpacing: 2 }}>
               <thead>
                 <tr>

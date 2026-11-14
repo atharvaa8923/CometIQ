@@ -51,7 +51,7 @@ export default function TalentSearch({ jobs }: { jobs: { id: string; title: stri
             <datalist id="talent-skills">{allSkills.data?.map((s) => <option key={s.id} value={s.name} />)}</datalist>
           </div>
           <div className="grid gap-2 md:grid-cols-4">
-            <div className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" /><input className="input pl-9" placeholder="Name or headline" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search name" /></div>
+            <div className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" /><input className="input pl-9" placeholder="Name or headline" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search name" /></div>
             <select className="input" value={program} onChange={(e) => setProgram(e.target.value)} aria-label="Program"><option value="">Any program</option>{programs.data?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
             <select className="input" value={goal} onChange={(e) => setGoal(e.target.value)} aria-label="Career goal"><option value="">Any career goal</option>{meta.data?.role_families.map((r) => <option key={r}>{r}</option>)}</select>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-comet-600" checked={verifiedOnly} onChange={(e) => setVerifiedOnly(e.target.checked)} />Has verified certifications</label>

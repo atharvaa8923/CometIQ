@@ -140,7 +140,7 @@ export default function StudentMatch() {
                   <li key={t.title} className="flex gap-3 rounded-lg border border-slate-200 p-3 text-sm">
                     <Badge color={t.priority === "high" ? "red" : t.priority === "medium" ? "orange" : "slate"}>{t.priority}</Badge>
                     <div><div className="font-semibold text-slate-800">{t.title}</div><div className="text-slate-600">{t.detail}</div></div></li>))}</ul>
-                <div className="flex items-center justify-between text-[11px] text-slate-400"><span>{tips.engine === "claude" ? "Reviewed by Claude" : "CometIQ built-in reviewer"}</span><button className="btn-ghost btn-sm" onClick={getTips}>Refresh</button></div>
+                <div className="flex items-center justify-between text-[11px] text-slate-500"><span>{tips.engine === "claude" ? "Reviewed by Claude" : "CometIQ built-in reviewer"}</span><button className="btn-ghost btn-sm" onClick={getTips}>Refresh</button></div>
               </div>)}
           </Card>
         </div>)}

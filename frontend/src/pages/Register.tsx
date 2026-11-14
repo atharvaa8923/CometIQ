@@ -9,6 +9,7 @@ export default function Register() {
   const nav = useNavigate();
   const [mode, setMode] = useState<"join" | "create">("join");
   const [f, setF] = useState({ full_name: "", email: "", password: "", role: "student", join_code: "", org_name: "", company: "" });
+  const [agree, setAgree] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
@@ -18,7 +19,7 @@ export default function Register() {
     setBusy(true); setErr(null);
     try {
       await register({
-        full_name: f.full_name, email: f.email, password: f.password,
+        full_name: f.full_name, email: f.email, password: f.password, accept_terms: agree,
         role: mode === "create" ? "faculty" : f.role,
         ...(mode === "join" ? { join_code: f.join_code } : { org_name: f.org_name }),
         ...(f.role === "employer" ? { company: f.company } : {}),
@@ -31,7 +32,7 @@ export default function Register() {
     <AuthShell title="Create your account">
       <div className="mb-4 grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1 text-sm font-semibold">
         {(["join", "create"] as const).map((m) => (
-          <button key={m} type="button" onClick={() => setMode(m)} className={`rounded-md py-1.5 ${mode === m ? "bg-white text-comet-800 shadow" : "text-slate-500"}`}>
+          <button key={m} type="button" onClick={() => setMode(m)} className={`rounded-md py-1.5 ${mode === m ? "bg-white text-comet-800 shadow" : "text-slate-600"}`}>
             {m === "join" ? "Join an institution" : "New institution"}
           </button>
         ))}
@@ -54,6 +55,8 @@ export default function Register() {
         ) : (
           <Field label="Institution name" hint="You'll be its administrator and get a join code to invite others."><input className="input" required value={f.org_name} onChange={set("org_name")} /></Field>
         )}
+        <label className="flex items-start gap-2 text-sm text-slate-600"><input type="checkbox" required className="mt-1 accent-comet-600" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
+          <span>I agree to the <Link to="/privacy" target="_blank" className="font-semibold text-comet-700 underline">Privacy Notice</Link> and <Link to="/terms" target="_blank" className="font-semibold text-comet-700 underline">Terms of Use</Link>.</span></label>
         <button className="btn-accent w-full" disabled={busy}>{busy ? "Creating…" : "Create account"}</button>
       </form>
       <p className="mt-4 text-center text-sm text-slate-500">Already have an account? <Link to="/login" className="font-semibold text-comet-700">Sign in</Link></p>

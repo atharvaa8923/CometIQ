@@ -1,10 +1,10 @@
 import { LogOut, Menu, Sparkles } from "lucide-react";
 import { useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { useApi } from "../lib/hooks";
 import { NAV, ROLE_LABEL } from "../lib/modules";
-import { AccountSettings, NotificationBell } from "./AccountMenu";
+import { AccountSettings, ConsentGate, NotificationBell } from "./AccountMenu";
 import { Logo } from "./Logo";
 
 export default function Layout() {
@@ -16,6 +16,7 @@ export default function Layout() {
 
   return (
     <div className="flex min-h-screen">
+      <a href="#main" className="sr-only z-50 rounded bg-white px-3 py-2 font-semibold text-comet-800 focus:not-sr-only focus:fixed focus:left-3 focus:top-3">Skip to main content</a>
       <aside className={`fixed inset-y-0 left-0 z-30 flex w-64 flex-col bg-comet-900 text-comet-50 transition-transform lg:static lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="px-5 py-5"><Logo light size="sm" /></div>
         <nav className="flex-1 space-y-1 px-3" aria-label="Main">
@@ -28,6 +29,7 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
+        <div className="mx-3 flex gap-3 text-[11px] text-comet-100/70"><Link to="/privacy" className="hover:text-white">Privacy</Link><Link to="/terms" className="hover:text-white">Terms</Link><Link to="/accessibility" className="hover:text-white">Accessibility</Link></div>
         <div className="m-3 rounded-lg bg-white/5 p-3 text-xs">
           <div className="flex items-center gap-1.5 font-semibold text-flame-300"><Sparkles className="h-3.5 w-3.5" />
             {meta?.ai_enabled ? "Claude AI connected" : "Built-in AI engine"}</div>
@@ -49,13 +51,14 @@ export default function Layout() {
               <div className="text-sm font-semibold text-slate-800">{user.full_name}</div>
               <div className="text-xs text-slate-500">{ROLE_LABEL[user.role]}{user.company ? ` · ${user.company}` : ""}</div>
             </div>
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-flame-500 text-sm font-bold text-white">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-flame-600 text-sm font-bold text-white">
               {user.full_name.split(" ").map((p) => p[0]).slice(0, 2).join("")}
             </div>
             <button className="btn-ghost btn-sm" onClick={logout} title="Sign out"><LogOut className="h-4 w-4" /><span className="hidden sm:inline">Sign out</span></button>
           </div>
         </header>
-        <main className="flex-1 px-4 py-6 lg:px-8"><Outlet /></main>
+        <main id="main" className="flex-1 px-4 py-6 lg:px-8"><Outlet /></main>
+        <ConsentGate />
       </div>
     </div>
   );

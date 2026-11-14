@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
-from .routers import admin, auth, catalog, dashboard, evidence, forge, gap, graphmap, jobs, match, notifications, path, tasks
+from .routers import admin, auth, catalog, dashboard, evidence, forge, gap, graphmap, jobs, match, notifications, path, privacy, tasks
 from .seed import init_db
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -55,7 +55,7 @@ async def security_headers(request, call_next):
     return resp
 
 
-for r in (auth.router, admin.router, catalog.router, dashboard.router, gap.router, jobs.router, forge.router, path.router, path.advising, match.router, evidence.router, graphmap.router, notifications.router, tasks.router):
+for r in (auth.router, admin.router, catalog.router, dashboard.router, gap.router, jobs.router, forge.router, path.router, path.advising, match.router, evidence.router, graphmap.router, notifications.router, tasks.router, privacy.router):
     app.include_router(r)
 
 

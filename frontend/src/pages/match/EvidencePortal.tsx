@@ -79,7 +79,7 @@ export default function EvidencePortal({ onChange }: { onChange?: () => void }) 
                 <div className="flex flex-wrap items-center gap-3 text-xs">
                   {e.file && <button className="inline-flex items-center gap-1 font-semibold text-comet-700 hover:underline" onClick={() => openFile(e.id)}><FileText className="h-3.5 w-3.5" />{e.file.filename}</button>}
                   {e.credential_url && <a className="inline-flex items-center gap-1 font-semibold text-comet-700 hover:underline" href={e.credential_url} target="_blank" rel="noreferrer"><ExternalLink className="h-3.5 w-3.5" />Verification link</a>}
-                  {e.status !== "verified" && <button className="ml-auto inline-flex items-center gap-1 text-slate-400 hover:text-red-600" onClick={() => del(e)}><Trash2 className="h-3.5 w-3.5" />Remove</button>}
+                  {e.status !== "verified" && <button className="ml-auto inline-flex items-center gap-1 text-slate-500 hover:text-red-600" onClick={() => del(e)}><Trash2 className="h-3.5 w-3.5" />Remove</button>}
                 </div>
                 {e.review_note && <div className={`rounded-lg p-2 text-xs ${e.status === "rejected" ? "bg-red-50 text-red-800" : "bg-slate-50 text-slate-600"}`}><b>Reviewer:</b> {e.review_note}</div>}
               </div>

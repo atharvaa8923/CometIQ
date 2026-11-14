@@ -25,10 +25,10 @@ function ReviewCard({ e, onDone }: { e: EvidenceRow; onDone: () => void }) {
       <div className="grid gap-4 md:grid-cols-[1fr_280px]">
         <div className="space-y-2 text-sm">
           <div className="text-xs text-slate-500"><b className="text-slate-700">{e.student?.name}</b> ({e.student?.email}) · {K.label}{e.issuer ? ` · ${e.issuer}` : ""}{e.course ? ` · ${e.course.code}` : ""}{e.issued_on ? ` · ${e.issued_on}` : ""} · submitted {new Date(e.created_at).toLocaleDateString()}</div>
-          <p className="whitespace-pre-wrap text-slate-700">{e.description || <i className="text-slate-400">No description</i>}</p>
+          <p className="whitespace-pre-wrap text-slate-700">{e.description || <i className="text-slate-500">No description</i>}</p>
           {e.credential_id && <div className="text-xs">Credential ID: <code className="rounded bg-slate-100 px-1">{e.credential_id}</code></div>}
           <div className="flex flex-wrap gap-3 text-xs">
-            {e.file ? <button className="inline-flex items-center gap-1 font-semibold text-comet-700 hover:underline" onClick={() => openFile(e.id)}><FileText className="h-3.5 w-3.5" />Open {e.file.filename} ({Math.round(e.file.size / 1024)} KB)</button> : <span className="text-slate-400">No file uploaded</span>}
+            {e.file ? <button className="inline-flex items-center gap-1 font-semibold text-comet-700 hover:underline" onClick={() => openFile(e.id)}><FileText className="h-3.5 w-3.5" />Open {e.file.filename} ({Math.round(e.file.size / 1024)} KB)</button> : <span className="text-slate-500">No file uploaded</span>}
             {e.credential_url && <a className="inline-flex items-center gap-1 font-semibold text-comet-700 hover:underline" href={e.credential_url} target="_blank" rel="noreferrer"><ExternalLink className="h-3.5 w-3.5" />Check verification link</a>}
           </div>
           <div><div className="label mt-2">Skills this proves (remove any that don't apply)</div>

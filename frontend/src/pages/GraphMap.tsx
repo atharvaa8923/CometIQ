@@ -102,12 +102,12 @@ export default function GraphMap() {
 
       {loading || !data ? <Spinner label="Building the knowledge graph…" /> : (
         <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
-          <div className="card overflow-x-auto p-3">
+          <div className="card overflow-x-auto p-3" tabIndex={0} role="region" aria-label="Knowledge graph map">
             <div ref={box} className="relative min-w-[700px]" style={{ height }}>
               {TYPES.map((t, i) => (
                 <div key={t.type} className="absolute top-0 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-600" style={{ left: i * colW + (colW - nodeW) / 2, width: nodeW }}>
                   <span className="flex h-5 w-5 items-center justify-center rounded-full text-white" style={{ background: t.color }}><t.Icon className="h-3 w-3" aria-hidden /></span>
-                  {t.title} <span className="font-normal text-slate-400">({data.counts[t.type + "s"] ?? cols[t.type].length})</span>
+                  {t.title} <span className="font-normal text-slate-500">({data.counts[t.type + "s"] ?? cols[t.type].length})</span>
                 </div>))}
               <svg className="pointer-events-none absolute inset-0" width={width} height={height} aria-hidden>
                 {data.edges.map((e, i) => {
@@ -154,7 +154,7 @@ export default function GraphMap() {
                 <div className="flex items-start justify-between gap-2">
                   <div><div className="text-xs font-semibold uppercase" style={{ color: TYPES[ORDER[selNode.type]].color }}>{TYPES[ORDER[selNode.type]].title.slice(0, -1)}</div>
                     <div className="text-base font-bold text-comet-900">{selNode.label}</div><div className="text-xs text-slate-500">{selNode.sub}</div></div>
-                  <button className="rounded p-1 text-slate-400 hover:bg-slate-100" onClick={() => setSel(null)} aria-label="Clear selection"><X className="h-4 w-4" /></button>
+                  <button className="rounded p-1 text-slate-500 hover:bg-slate-100" onClick={() => setSel(null)} aria-label="Clear selection"><X className="h-4 w-4" /></button>
                 </div>
                 {selNode.type === "skill" && (skillDetail.loading || !skillDetail.data ? <Spinner /> : (
                   <div className="space-y-2">
@@ -162,7 +162,7 @@ export default function GraphMap() {
                       {skillDetail.data.is_emerging && <Badge color="orange">Emerging</Badge>}</div>
                     <div className="text-xs text-slate-600">Most wanted by: {skillDetail.data.by_role.slice(0, 3).map((r) => `${r.role} (${r.jobs})`).join(", ")}</div>
                     <Section title="Taught in">{skillDetail.data.courses.length ? skillDetail.data.courses.map((c) => (
-                      <button key={c.id} className="block text-left text-xs hover:underline" onClick={() => setCourse(c.id)}><b className="text-comet-800">{c.code}</b> {c.title}{!c.primary && <span className="text-slate-400"> (secondary topic)</span>}</button>))
+                      <button key={c.id} className="block text-left text-xs hover:underline" onClick={() => setCourse(c.id)}><b className="text-comet-800">{c.code}</b> {c.title}{!c.primary && <span className="text-slate-500"> (secondary topic)</span>}</button>))
                       : <span className="text-xs text-red-700">No course teaches this yet — a gap for CometGap / CometForge.</span>}</Section>
                   </div>))}
                 {selNode.type === "course" && <button className="btn-ghost btn-sm" onClick={() => setCourse(String(selNode.ref))}>Course details & live sections</button>}
@@ -174,7 +174,7 @@ export default function GraphMap() {
                   const list = connected(t);
                   return list.length ? <Section key={t} title={`Connected ${TYPES[ORDER[t]].title.toLowerCase()} (${list.length})`}>
                     <div className="flex flex-wrap gap-1">{list.slice(0, 14).map((n) => <button key={n.id} onClick={() => setSel(n.id)} className="chip bg-slate-100 text-slate-700 hover:bg-slate-200">{n.label}</button>)}
-                      {list.length > 14 && <span className="text-xs text-slate-400">+{list.length - 14} more</span>}</div></Section> : null;
+                      {list.length > 14 && <span className="text-xs text-slate-500">+{list.length - 14} more</span>}</div></Section> : null;
                 })}
               </div>
             )}

@@ -30,7 +30,7 @@ export default function LiveCourse({ courseId }: { courseId: string }) {
           <table className="table-base text-xs"><thead><tr><th>Section</th><th>Professor</th><th>When & where</th><th>Mode</th></tr></thead>
             <tbody>{data.sections.map((s) => (
               <tr key={s.section}><td className="font-semibold">{s.section}</td><td>{s.professors.join(", ") || "TBA"}</td>
-                <td>{s.meetings.length ? s.meetings.map((m, i) => <div key={i}>{m.days} {m.time} {m.location && <span className="text-slate-500">· {m.location}</span>}</div>) : <span className="text-slate-400">—</span>}</td>
+                <td>{s.meetings.length ? s.meetings.map((m, i) => <div key={i}>{m.days} {m.time} {m.location && <span className="text-slate-500">· {m.location}</span>}</div>) : <span className="text-slate-500">—</span>}</td>
                 <td>{s.instruction_mode}{s.syllabus_uri && <> · <a className="text-comet-700 underline" href={s.syllabus_uri} target="_blank" rel="noreferrer">syllabus</a></>}</td></tr>))}</tbody></table>
         </div>)}
       {g && (
@@ -53,7 +53,7 @@ export default function LiveCourse({ courseId }: { courseId: string }) {
         <div><div className="label">By professor (10+ students)</div>
           <table className="table-base text-xs"><thead><tr><th>Professor</th><th>Avg. GPA</th><th>A range</th><th>Students</th></tr></thead>
             <tbody>{data.professors.map((p) => <tr key={p.name}><td className="font-medium">{p.name}</td><td>{p.gpa?.toFixed(2)}</td><td>{p.a_rate}%</td><td>{p.students}</td></tr>)}</tbody></table></div>)}
-      <div className="text-right text-[10px] text-slate-400">Source: {data.source} · refreshed every 6 hours</div>
+      <div className="text-right text-[10px] text-slate-500">Source: {data.source} · refreshed every 6 hours</div>
     </div>
   );
 }

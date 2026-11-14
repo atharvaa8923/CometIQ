@@ -65,7 +65,7 @@ export default function Landing() {
                     <div className="mt-2 text-sm font-bold text-comet-900">{x.t}</div>
                     <div className="text-[11px] text-slate-500">{x.s}</div>
                   </div>
-                  {k < a.length - 1 && <ArrowRight className="h-4 w-4 shrink-0 text-slate-400" />}
+                  {k < a.length - 1 && <ArrowRight className="h-4 w-4 shrink-0 text-slate-500" />}
                 </div>
               ))}
             </div>
@@ -110,7 +110,8 @@ export default function Landing() {
           <Link to="/register" className="btn-accent px-6 py-3"><Building2 className="h-4 w-4" />Set up your institution</Link>
         </div>
       </section>
-      <footer className="bg-flame-500 py-3 text-center text-xs font-bold tracking-[0.3em] text-white">INNOVATION / TALENT / IMPACT</footer>
+      <footer className="bg-flame-600 py-3 text-center text-xs font-bold tracking-[0.3em] text-white">INNOVATION / TALENT / IMPACT</footer>
+      <div className="flex justify-center gap-6 bg-white py-3 text-xs text-slate-600"><Link to="/privacy" className="hover:underline">Privacy</Link><Link to="/terms" className="hover:underline">Terms</Link><Link to="/accessibility" className="hover:underline">Accessibility</Link></div>
     </div>
   );
 }

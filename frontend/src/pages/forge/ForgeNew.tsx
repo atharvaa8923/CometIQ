@@ -58,7 +58,7 @@ export default function ForgeNew() {
                 <input type="checkbox" className="mt-1 accent-flame-500" checked={focus.includes(g.name)} onChange={() => toggle(g.name)} />
                 <div className="flex-1">
                   <div className="flex flex-wrap items-center gap-2 font-semibold text-slate-800">{g.name}<Badge color={PRIORITY_COLOR[g.priority]}>{g.priority}</Badge><StatusTag s={g.status} /></div>
-                  <div className="text-xs text-slate-500">{Math.round(g.demand * 100)}% of postings{g.taught_in.length ? ` · also in ${g.taught_in.join(", ")}` : ""}</div>
+                  <div className="text-xs text-slate-600">{Math.round(g.demand * 100)}% of postings{g.taught_in.length ? ` · also in ${g.taught_in.join(", ")}` : ""}</div>
                 </div>
               </label>))}
           </div>)}

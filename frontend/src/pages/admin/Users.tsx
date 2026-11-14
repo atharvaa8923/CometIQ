@@ -22,6 +22,10 @@ export default function Users() {
   const patch = async (id: string, body: Record<string, unknown>) => {
     try { await api.patch(`/admin/users/${id}`, body); reload(); toast("User updated"); } catch (e) { toast((e as Error).message, "error"); }
   };
+  const erase = async (r: Row) => {
+    if (!confirm(`Permanently delete ${r.full_name} (${r.email}) and their personal data? This cannot be undone.`)) return;
+    try { await api.del(`/privacy/admin/users/${r.id}`); toast("User and personal data deleted"); reload(); } catch (e) { toast((e as Error).message, "error"); }
+  };
   const create = async (e: React.FormEvent) => {
     e.preventDefault(); setErr(null);
     try { await api.post("/admin/users", { ...f, company: f.company || null }); setOpen(false); reload(); toast("User created"); }
@@ -49,7 +53,9 @@ export default function Users() {
                   </select>
                 </td>
                 <td><Badge color={r.is_active ? ROLE_COLOR[r.role] : "red"}>{r.is_active ? "Active" : "Disabled"}</Badge></td>
-                <td className="text-right">{r.id !== user?.id && <button className="btn-ghost btn-sm" onClick={() => patch(r.id, { is_active: !r.is_active })}>{r.is_active ? "Disable" : "Enable"}</button>}</td>
+                <td className="whitespace-nowrap text-right">{r.id !== user?.id && <>
+                  <button className="btn-ghost btn-sm" onClick={() => patch(r.id, { is_active: !r.is_active })}>{r.is_active ? "Disable" : "Enable"}</button>
+                  <button className="btn-ghost btn-sm ml-1 text-red-700" onClick={() => erase(r)} aria-label={`Delete ${r.full_name}`}>Delete</button></>}</td>
               </tr>))}
             </tbody></table>
         )}

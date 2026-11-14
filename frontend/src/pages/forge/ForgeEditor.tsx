@@ -67,7 +67,7 @@ export default function ForgeEditor() {
       <div className="grid gap-4 md:grid-cols-4">
         <div className="card flex items-center gap-3 p-4 md:col-span-2">
           {d.scores.before != null ? (<>
-            <div className="text-center"><div className="text-2xl font-bold text-slate-400">{Math.round(d.scores.before)}%</div><div className="text-[11px] text-slate-500">current</div></div>
+            <div className="text-center"><div className="text-2xl font-bold text-slate-500">{Math.round(d.scores.before)}%</div><div className="text-[11px] text-slate-500">current</div></div>
             <ArrowRight className="h-5 w-5 text-flame-500" />
             <div className="text-center"><div className="text-2xl font-bold text-comet-700">{Math.round(d.scores.after ?? 0)}%</div><div className="text-[11px] text-slate-500">projected</div></div>
             <div className="ml-2 text-sm text-slate-600">industry coverage vs. <b>{d.scores.target}</b> postings once this draft is taught{d.analysis_id && <> · <Link to={`/gap/analysis/${d.analysis_id}`} className="font-semibold text-comet-700 hover:underline">gap report</Link></>}</div>
@@ -130,7 +130,7 @@ export default function ForgeEditor() {
               <div key={i} className="grid items-start gap-2 md:grid-cols-[200px_90px_1fr_auto]">
                 <input className={`${ed} font-semibold`} disabled={locked} value={a.name} aria-label="Assessment name" onChange={(e) => upd({ assessments: c.assessments.map((x, k) => (k === i ? { ...x, name: e.target.value } : x)) })} />
                 <div className="relative"><input type="number" min={0} max={100} className={`${ed} pr-6`} disabled={locked} value={a.weight} aria-label={`${a.name} weight`}
-                  onChange={(e) => upd({ assessments: c.assessments.map((x, k) => (k === i ? { ...x, weight: +e.target.value } : x)) })} /><span className="absolute right-2 top-1.5 text-xs text-slate-400">%</span></div>
+                  onChange={(e) => upd({ assessments: c.assessments.map((x, k) => (k === i ? { ...x, weight: +e.target.value } : x)) })} /><span className="absolute right-2 top-1.5 text-xs text-slate-500">%</span></div>
                 <textarea className={`${ed} h-16 text-xs`} disabled={locked} value={a.description} aria-label={`${a.name} description`} onChange={(e) => upd({ assessments: c.assessments.map((x, k) => (k === i ? { ...x, description: e.target.value } : x)) })} />
                 {!locked && <button className="btn-ghost btn-sm px-2 text-red-600" aria-label={`Delete ${a.name}`} onClick={() => upd({ assessments: c.assessments.filter((_, k) => k !== i) })}><Trash2 className="h-3.5 w-3.5" /></button>}
               </div>))}
@@ -153,7 +153,7 @@ export default function ForgeEditor() {
         <div className="grid gap-4 lg:grid-cols-2">
           <Card title={`${c.framework} standards × learning outcomes`} padded={false}>
             {c.accreditation.length === 0 ? <p className="p-5 text-sm text-slate-500">No accreditation framework selected.</p> : (
-              <div className="overflow-x-auto p-3">
+              <div className="overflow-x-auto p-3" tabIndex={0} role="region" aria-label="Accreditation standards by learning outcome">
                 <table className="text-xs"><thead><tr><th className="p-1 text-left">Standard</th>{c.learning_outcomes.map((o) => <th key={o.id} className="p-1 text-slate-500">{o.id}</th>)}</tr></thead>
                   <tbody>{c.accreditation.map((a) => (
                     <tr key={a.standard}><td className="whitespace-nowrap p-1 pr-3 font-medium text-slate-700">{a.standard}</td>

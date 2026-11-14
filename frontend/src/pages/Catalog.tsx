@@ -28,7 +28,7 @@ export function CourseModal({ id, onClose }: { id: string | null; onClose: () =>
             <div className="label">Prerequisites</div>
             {groups.size === 0 ? <span className="text-slate-500">None</span> : (
               <div className="space-y-1">{[...groups.values()].map((g, i) => (
-                <div key={i}>{i > 0 && <span className="mr-1 text-xs font-bold text-slate-400">AND</span>}
+                <div key={i}>{i > 0 && <span className="mr-1 text-xs font-bold text-slate-500">AND</span>}
                   {g.map((c, j) => <span key={c.id}>{j > 0 && <span className="mx-1 text-xs font-bold text-flame-600">OR</span>}<Badge color="blue">{c.code}</Badge></span>)}
                 </div>))}
               </div>
@@ -103,9 +103,9 @@ export default function Catalog() {
       )}
       {tab === "courses" && (
         <Card padded={false}>
-          <div className="relative border-b border-slate-100 p-3"><Search className="absolute left-6 top-5 h-4 w-4 text-slate-400" />
+          <div className="relative border-b border-slate-100 p-3"><Search className="absolute left-6 top-5 h-4 w-4 text-slate-500" />
             <input className="input pl-9" placeholder="Search by code or title…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search courses" /></div>
-          <div className="max-h-[65vh] overflow-y-auto">
+          <div className="max-h-[65vh] overflow-y-auto" tabIndex={0} role="region" aria-label="Course list">
             <table className="table-base"><thead><tr><th>Code</th><th>Title</th><th>Credits</th></tr></thead>
               <tbody>{courses.data?.map((c) => (
                 <tr key={c.id} className="cursor-pointer hover:bg-slate-50" onClick={() => setCourse(c.id)}>

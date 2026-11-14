@@ -1,7 +1,7 @@
-import { Bell, Settings } from "lucide-react";
+import { Bell, Download, Settings, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { api, tokenStore } from "../lib/api";
+import { Link, useNavigate } from "react-router-dom";
+import { api, download, tokenStore } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useApi } from "../lib/hooks";
 import { useToast } from "../lib/toast";
@@ -27,7 +27,7 @@ export function NotificationBell() {
     <div className="relative" ref={ref}>
       <button className="relative rounded-full p-2 text-slate-600 hover:bg-slate-100" onClick={toggle} aria-label={`Notifications${data?.unread ? `, ${data.unread} unread` : ""}`} aria-expanded={open}>
         <Bell className="h-5 w-5" />
-        {!!data?.unread && <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-flame-500 px-1 text-[10px] font-bold text-white">{data.unread}</span>}
+        {!!data?.unread && <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-flame-600 px-1 text-[10px] font-bold text-white">{data.unread}</span>}
       </button>
       {open && (
         <div className="absolute right-0 z-30 mt-2 w-80 rounded-xl border border-slate-200 bg-white shadow-xl" role="dialog" aria-label="Notifications">
@@ -38,7 +38,7 @@ export function NotificationBell() {
               <li key={n.id}><button className={`w-full px-4 py-3 text-left hover:bg-slate-50 ${n.read ? "" : "bg-flame-50/50"}`} onClick={() => { setOpen(false); if (n.link) nav(n.link); }}>
                 <div className="text-sm font-semibold text-slate-800">{n.title}</div>
                 <div className="text-xs text-slate-600">{n.body}</div>
-                <div className="mt-0.5 text-[11px] text-slate-400">{new Date(n.created_at).toLocaleString()}</div>
+                <div className="mt-0.5 text-[11px] text-slate-500">{new Date(n.created_at).toLocaleString()}</div>
               </button></li>))}
           </ul>
         </div>)}
@@ -47,9 +47,17 @@ export function NotificationBell() {
 }
 
 export function AccountSettings() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const toast = useToast();
   const [open, setOpen] = useState(false);
+  const [delPw, setDelPw] = useState("");
+  const [delConfirm, setDelConfirm] = useState("");
+  const [delErr, setDelErr] = useState<string | null>(null);
+  const deleteAccount = async (e: React.FormEvent) => {
+    e.preventDefault(); setDelErr(null);
+    try { await api.post("/privacy/delete-account", { password: delPw, confirm: delConfirm }); logout(); window.location.href = "/"; }
+    catch (x) { setDelErr((x as Error).message); }
+  };
   const [notifs, setNotifs] = useState(user?.email_notifications ?? true);
   const [cur, setCur] = useState("");
   const [pw, setPw] = useState("");
@@ -76,8 +84,43 @@ export function AccountSettings() {
             <Field label="New password" hint="At least 8 characters"><input className="input" type="password" minLength={8} required autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} /></Field>
             <button className="btn-primary btn-sm">Change password</button>
           </form>
+          <div className="space-y-3 border-t border-slate-100 pt-4">
+            <div className="text-sm font-semibold text-slate-700">Your data</div>
+            <p className="text-xs text-slate-500">See what CometIQ stores in the <Link to="/privacy" className="text-comet-700 underline" onClick={() => setOpen(false)}>Privacy Notice</Link>.</p>
+            <button type="button" className="btn-ghost btn-sm" onClick={() => download("/privacy/export", "cometiq-my-data.json")}><Download className="h-4 w-4" />Download my data</button>
+            <details className="rounded-lg border border-red-200 p-3">
+              <summary className="cursor-pointer text-sm font-semibold text-red-700">Delete my account</summary>
+              <form onSubmit={deleteAccount} className="mt-3 space-y-2">
+                <p className="text-xs text-slate-600">This permanently deletes your account and personal data (plans, submissions, applications). It cannot be undone.</p>
+                <ErrorBox error={delErr} />
+                <Field label="Password"><input className="input" type="password" required autoComplete="current-password" value={delPw} onChange={(e) => setDelPw(e.target.value)} /></Field>
+                <Field label='Type DELETE to confirm'><input className="input" required value={delConfirm} onChange={(e) => setDelConfirm(e.target.value)} /></Field>
+                <button className="btn btn-sm bg-red-600 text-white hover:bg-red-700" disabled={delConfirm.trim().toUpperCase() !== "DELETE"}><Trash2 className="h-4 w-4" />Permanently delete</button>
+              </form>
+            </details>
+          </div>
         </div>
       </Modal>
     </>
+  );
+}
+
+
+/** Asks for (re)consent when the privacy notice/terms version changed since the user last accepted. */
+export function ConsentGate() {
+  const { user } = useAuth();
+  const { data } = useApi<{ version: string }>("/privacy/policy");
+  const [accepted, setAccepted] = useState(false);
+  if (!user || !data || accepted || user.consent_version === data.version) return null;
+  const accept = async () => { await api.post("/privacy/consent"); setAccepted(true); };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" role="dialog" aria-modal="true" aria-labelledby="consent-title">
+      <div className="card max-w-md p-6">
+        <h2 id="consent-title" className="text-lg font-bold text-comet-900">Before you continue</h2>
+        <p className="mt-2 text-sm text-slate-600">Please review how CometIQ uses your information. You can download or delete your data at any time from Account settings.</p>
+        <div className="mt-3 flex gap-4 text-sm"><Link to="/privacy" target="_blank" className="font-semibold text-comet-700 underline">Privacy Notice</Link><Link to="/terms" target="_blank" className="font-semibold text-comet-700 underline">Terms of Use</Link></div>
+        <button className="btn-primary mt-5 w-full" onClick={accept} autoFocus>I agree</button>
+      </div>
+    </div>
   );
 }

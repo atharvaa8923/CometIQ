@@ -24,11 +24,11 @@ const Row = ({ s, kind, showLearn }: { s: SkillHit; kind: "matched" | "partial" 
       <Icon className="mt-0.5 h-4 w-4 shrink-0" style={{ color }} aria-label={kind} />
       <div className="min-w-0 flex-1">
         <span className="font-medium text-slate-800">{s.skill}</span>
-        <span className={`ml-1.5 text-[11px] font-semibold uppercase ${s.importance === "required" ? "text-slate-600" : "text-slate-400"}`}>{s.importance}</span>
+        <span className={`ml-1.5 text-[11px] font-semibold uppercase ${s.importance === "required" ? "text-slate-600" : "text-slate-500"}`}>{s.importance}</span>
         {s.sources.length > 0 && <div className="text-xs text-slate-500">Evidence: {s.sources.join(", ")}{kind === "partial" ? ` · level ${Math.round(s.level * 100)}%` : ""}</div>}
         {showLearn && kind === "missing" && (s.learn_in?.length ? (
           <div className="text-xs text-comet-700"><GraduationCap className="mr-1 inline h-3.5 w-3.5" />Learn it in {s.learn_in.join(", ")} · <Link to="/path" className="font-semibold underline">add to my plan</Link></div>
-        ) : <div className="text-xs text-slate-400">No catalog course teaches this yet</div>)}
+        ) : <div className="text-xs text-slate-500">No catalog course teaches this yet</div>)}
       </div>
     </li>
   );
@@ -48,7 +48,7 @@ export function Breakdown({ m, showLearn }: { m: MatchResult; showLearn?: boolea
         {([["matched", "You have", m.matched], ["partial", "Partially", m.partial], ["missing", "Missing", m.missing]] as const).map(([k, title, list]) => (
           <div key={k}>
             <div className="label">{title} ({list.length})</div>
-            {list.length ? <ul className="space-y-2">{list.map((s) => <Row key={s.skill} s={s} kind={k} showLearn={showLearn} />)}</ul> : <div className="text-sm text-slate-400">—</div>}
+            {list.length ? <ul className="space-y-2">{list.map((s) => <Row key={s.skill} s={s} kind={k} showLearn={showLearn} />)}</ul> : <div className="text-sm text-slate-500">—</div>}
           </div>))}
       </div>
     </div>
@@ -70,7 +70,7 @@ export function AiExplain({ path }: { path: string }) {
     <div className="rounded-xl border border-flame-200 bg-gradient-to-br from-flame-50 to-white p-4">
       <div className="mb-3 flex items-start gap-2 text-sm font-semibold text-slate-800"><Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-flame-500" />{x.headline}</div>
       <div className="grid gap-4 md:grid-cols-3"><List title="Strengths" items={x.strengths} /><List title="Gaps" items={x.gaps} /><List title="Next steps" items={x.next_steps} /></div>
-      <div className="mt-2 text-right text-[11px] text-slate-400">{x.engine === "claude" ? "Written by Claude from the score breakdown" : "CometIQ built-in explainer"}</div>
+      <div className="mt-2 text-right text-[11px] text-slate-500">{x.engine === "claude" ? "Written by Claude from the score breakdown" : "CometIQ built-in explainer"}</div>
     </div>
   );
 }

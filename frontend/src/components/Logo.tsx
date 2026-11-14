@@ -9,7 +9,7 @@ export function Logo({ light = false, size = "md" }: { light?: boolean; size?: "
         <path d="M52 4l2.2 5.8L60 12l-5.8 2.2L52 20l-2.2-5.8L44 12l5.8-2.2z" fill="#ffa65c" />
       </svg>
       <span className={`${text} font-extrabold tracking-tight ${light ? "text-white" : "text-comet-900"}`}>
-        COMET<span className="text-flame-500">IQ</span>
+        COMET<span className={light ? "text-flame-400" : "text-flame-600"}>IQ</span>
       </span>
     </div>
   );

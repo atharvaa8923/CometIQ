@@ -5,11 +5,11 @@
 @layer components {
   .btn { @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2; }
   .btn-primary { @apply btn bg-comet-700 text-white hover:bg-comet-800 focus-visible:ring-comet-500; }
-  .btn-accent { @apply btn bg-flame-500 text-white hover:bg-flame-600 focus-visible:ring-flame-400; }
+  .btn-accent { @apply btn bg-flame-600 text-white hover:bg-flame-700 focus-visible:ring-flame-400; }
   .btn-ghost { @apply btn border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 focus-visible:ring-slate-400; }
   .btn-sm { @apply px-3 py-1.5 text-xs; }
   .input { @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-slate-400 focus:border-comet-500 focus:outline-none focus:ring-2 focus:ring-comet-500/20; }
-  .label { @apply mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500; }
+  .label { @apply mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600; }
   .card { @apply rounded-xl border border-slate-200 bg-white shadow-card; }
   .chip { @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium; }
   .table-base { @apply w-full text-left text-sm; }

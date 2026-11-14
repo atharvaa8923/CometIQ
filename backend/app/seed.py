@@ -80,6 +80,10 @@ def seed_demo(db: Session) -> None:
                          company="Lone Star Analytics", password_hash=pw),
         "advisor": User(org_id=org.id, email="advisor@cometiq.app", full_name="Taylor Brooks", role="advisor", password_hash=pw),
     }
+    from .routers.privacy import POLICY_VERSION
+
+    for u in users.values():
+        u.consent_version = POLICY_VERSION
     db.add_all(users.values())
     db.flush()
     seed_catalog(db, org)

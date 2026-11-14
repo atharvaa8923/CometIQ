@@ -24,7 +24,7 @@ export default function ForgeHome() {
               <div className="mt-1 text-xs text-slate-500">{new Date(d.created_at).toLocaleDateString()} · {d.new_modules} new modules · {d.engine === "claude" ? "Claude AI" : "Built-in engine"}</div>
               {d.scores.before != null && (
                 <div className="mt-4 flex items-center gap-2 text-sm">
-                  <span className="font-semibold text-slate-500">{Math.round(d.scores.before)}%</span><ArrowRight className="h-4 w-4 text-slate-400" />
+                  <span className="font-semibold text-slate-500">{Math.round(d.scores.before)}%</span><ArrowRight className="h-4 w-4 text-slate-500" />
                   <span className="text-lg font-bold text-comet-700">{Math.round(d.scores.after ?? 0)}%</span>
                   <span className="text-xs text-slate-500">projected coverage vs. {d.scores.target}</span>
                 </div>)}

@@ -41,7 +41,7 @@ export function ReadinessCard({ r, title = "Career readiness" }: { r: Readiness;
       <ul className="space-y-1.5">
         {r.skills.map((s) => { const x = READY[s.status]; return (
           <li key={s.skill} className="flex items-center justify-between gap-2 text-sm" title={s.courses_outside_plan.length ? `Also taught in ${s.courses_outside_plan.join(", ")}` : undefined}>
-            <span className="truncate">{s.skill} <span className="text-xs text-slate-400">{Math.round(s.demand * 100)}%</span></span>
+            <span className="truncate">{s.skill} <span className="text-xs text-slate-500">{Math.round(s.demand * 100)}%</span></span>
             <span className={`chip ${x.cls}`}><x.Icon className="h-3.5 w-3.5" style={{ color: x.color }} aria-hidden />{x.label}{s.status === "gap" && s.courses_outside_plan.length ? ` · try ${s.courses_outside_plan[0]}` : ""}</span>
           </li>); })}
       </ul>
@@ -193,7 +193,7 @@ export default function PathHome() {
                   {s.status === "completed" ? <CheckCircle2 className="h-4 w-4 text-green-600" aria-label="completed" /> : s.status === "remaining" ? <Circle className="h-4 w-4 text-slate-300" aria-label="remaining" /> : <CircleDot className="h-4 w-4 text-sky-600" aria-label={s.status} />}
                   <div>{s.options.map((op, k) => <span key={op.id}>{k > 0 && <span className="mx-1 text-xs font-bold text-flame-600">OR</span>}
                     <button className="font-semibold text-comet-800 hover:underline" onClick={() => setCourse(op.id)}>{op.code}</button> <span className="text-slate-600">{op.title}</span></span>)}
-                    <span className="ml-2 text-xs text-slate-400">{s.status}</span></div>
+                    <span className="ml-2 text-xs text-slate-500">{s.status}</span></div>
                 </li>))}
             </ul>
           </Card>
@@ -209,7 +209,7 @@ export default function PathHome() {
                     <td className="text-xs text-slate-500">{c.term ?? "—"}</td>
                     <td><select className="input w-32 py-1 text-xs" value={c.status} onChange={(e) => setStatus(c.course_id, e.target.value)} aria-label={`Status of ${c.code}`}>
                       <option value="completed">Completed</option><option value="enrolled">Enrolled</option><option value="planned">Planned</option></select></td>
-                    <td><button className="text-slate-400 hover:text-red-600" onClick={() => remove(c.course_id)} aria-label={`Remove ${c.code}`}><Trash2 className="h-4 w-4" /></button></td></tr>))}</tbody></table>)}
+                    <td><button className="text-slate-500 hover:text-red-600" onClick={() => remove(c.course_id)} aria-label={`Remove ${c.code}`}><Trash2 className="h-4 w-4" /></button></td></tr>))}</tbody></table>)}
           </Card>
         </div>)}
 
@@ -224,7 +224,7 @@ export default function PathHome() {
                   <button className="btn-ghost btn-sm shrink-0" onClick={() => setStatus(r.id, "planned")}><Plus className="h-4 w-4" />Plan</button>
                 </li>))}</ul>)}
           </Card>
-          <Card title={<span className="flex items-center gap-2"><Lock className="h-4 w-4 text-slate-400" />Unlock later</span>}>
+          <Card title={<span className="flex items-center gap-2"><Lock className="h-4 w-4 text-slate-500" />Unlock later</span>}>
             <ul className="space-y-3">{recs.data?.blocked.map((r) => (
               <li key={r.id} className="rounded-lg border border-slate-200 p-3 text-sm">
                 <button className="font-semibold text-comet-800 hover:underline" onClick={() => setCourse(r.id)}>{r.code}</button> {r.title}

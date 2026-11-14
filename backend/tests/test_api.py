@@ -36,16 +36,16 @@ def test_rbac(client, tokens):
 
 def test_register_join_and_new_org(client):
     r = client.post("/api/auth/register", json={"full_name": "New Stu", "email": "new.stu@example.edu", "password": "password123",
-                                                "role": "student", "join_code": "COMET-UTD"})
+                                                "role": "student", "join_code": "COMET-UTD", "accept_terms": True})
     assert r.status_code == 201 and r.json()["user"]["role"] == "student"
     r = client.post("/api/auth/register", json={"full_name": "Dean X", "email": "dean@other.edu", "password": "password123",
-                                                "role": "faculty", "org_name": "Other University"})
+                                                "role": "faculty", "org_name": "Other University", "accept_terms": True})
     assert r.status_code == 201 and r.json()["user"]["role"] == "admin"  # creator administers the new org
     other = {"Authorization": f"Bearer {r.json()['token']}"}
     # tenant isolation: the new org has no catalog and cannot see UTD programs
     assert client.get("/api/programs", headers=other).json() == []
     assert client.post("/api/auth/register", json={"full_name": "Dup", "email": "new.stu@example.edu", "password": "password123",
-                                                   "role": "student", "join_code": "COMET-UTD"}).status_code == 409
+                                                   "role": "student", "join_code": "COMET-UTD", "accept_terms": True}).status_code == 409
 
 
 def test_catalog(client, tokens):

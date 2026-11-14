@@ -18,7 +18,7 @@ export default function Market() {
               title={`${s.name}: in ${s.job_count} of ${data.job_count} postings (${Math.round(s.job_count / data.job_count * 100)}%), required in ${Math.round(s.required_share * 100)}% of those`}>
               <div className="truncate font-medium text-slate-700">{s.name} {s.is_emerging && <Badge color="orange">Emerging</Badge>}</div>
               <div className="h-3 rounded-r bg-slate-100"><div className="h-3 rounded-r bg-comet-600" style={{ width: `${(s.job_count / max) * 100}%` }} /></div>
-              <div className="text-right text-xs text-slate-600">{Math.round((s.job_count / data.job_count) * 100)}% <span className="text-slate-400">({s.job_count})</span></div>
+              <div className="text-right text-xs text-slate-600">{Math.round((s.job_count / data.job_count) * 100)}% <span className="text-slate-500">({s.job_count})</span></div>
             </div>
           ))}
           <p className="pt-2 text-xs text-slate-500">Share of open postings that mention each skill. Hover a row for required vs. preferred detail.</p>

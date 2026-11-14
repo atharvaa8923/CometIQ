@@ -67,7 +67,7 @@ export function ErrorBox({ error }: { error: string | null }) {
 export function Empty({ icon, title, children }: { icon?: ReactNode; title: string; children?: ReactNode }) {
   return (
     <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
-      {icon && <div className="mb-3 text-slate-400">{icon}</div>}
+      {icon && <div className="mb-3 text-slate-500">{icon}</div>}
       <div className="font-semibold text-slate-700">{title}</div>
       {children && <div className="mt-1 max-w-md text-sm text-slate-500">{children}</div>}
     </div>
@@ -87,7 +87,7 @@ export function Modal({ open, onClose, title, children, wide }: { open: boolean;
       <div className={`card w-full ${wide ? "max-w-3xl" : "max-w-lg"}`} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
           <h2 className="font-semibold text-slate-800">{title}</h2>
-          <button className="rounded p-1 text-slate-400 hover:bg-slate-100" onClick={onClose} aria-label="Close"><X className="h-4 w-4" /></button>
+          <button className="rounded p-1 text-slate-500 hover:bg-slate-100" onClick={onClose} aria-label="Close"><X className="h-4 w-4" /></button>
         </div>
         <div className="p-5">{children}</div>
       </div>
@@ -109,11 +109,11 @@ export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { id: 
 }
 
 /** Horizontal score bar 0–100. */
-export function ScoreBar({ value, tone }: { value: number; tone?: "auto" | "comet" | "flame" }) {
+export function ScoreBar({ value, tone, label = "Score" }: { value: number; tone?: "auto" | "comet" | "flame"; label?: string }) {
   const v = Math.max(0, Math.min(100, value));
   const color = tone === "flame" ? "bg-flame-500" : tone === "comet" ? "bg-comet-600" : v >= 70 ? "bg-comet-600" : v >= 45 ? "bg-amber-500" : "bg-red-500";
   return (
-    <div className="h-2 w-full rounded-full bg-slate-100" role="progressbar" aria-valuenow={Math.round(v)} aria-valuemin={0} aria-valuemax={100}>
+    <div className="h-2 w-full rounded-full bg-slate-100" role="progressbar" aria-label={label} aria-valuenow={Math.round(v)} aria-valuemin={0} aria-valuemax={100}>
       <div className={`h-2 rounded-full ${color}`} style={{ width: `${v}%` }} />
     </div>
   );
