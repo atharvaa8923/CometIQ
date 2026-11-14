@@ -1,0 +1,24 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: cometiq
+      POSTGRES_USER: cometiq
+      POSTGRES_PASSWORD: cometiq
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cometiq"]
+      interval: 5s
+      retries: 10
+
+  app:
+    build: .
+    ports: ["8000:8000"]
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgresql+psycopg://cometiq:cometiq@db:5432/cometiq
+    depends_on:
+      db: { condition: service_healthy }
+
+volumes:
+  pgdata:

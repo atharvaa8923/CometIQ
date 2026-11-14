@@ -19,6 +19,8 @@ FRONTEND = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    if settings.ENV == "production" and (settings.JWT_SECRET == "change-me-in-production" or len(settings.JWT_SECRET) < 32):
+        raise RuntimeError("Set a strong JWT_SECRET (32+ characters) before running in production")
     init_db()
     yield
 
