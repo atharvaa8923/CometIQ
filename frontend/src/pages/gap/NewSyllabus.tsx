@@ -2,7 +2,7 @@ import { FileText, Loader2, ScanSearch, UploadCloud } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, ErrorBox, Field, PageHeader } from "../../components/ui";
-import { api } from "../../lib/api";
+import { api, waitForTask } from "../../lib/api";
 import { useApi } from "../../lib/hooks";
 import { TargetSelect } from "./GapHome";
 
@@ -13,6 +13,7 @@ export default function NewSyllabus() {
   const [f, setF] = useState({ title: "", code: "", semester: "Spring 2026", text: "", target: "auto" });
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState("Uploading…");
   const courses = useApi<{ id: string; code: string; title: string }[]>(f.code.length >= 2 ? `/courses?limit=8&q=${encodeURIComponent(f.code)}` : null);
 
   const submit = async (e: React.FormEvent) => {
@@ -20,7 +21,11 @@ export default function NewSyllabus() {
     const fd = new FormData();
     Object.entries(f).forEach(([k, v]) => k !== "text" && fd.append(k, v));
     if (mode === "file" && file) fd.append("file", file); else fd.append("text", f.text);
-    try { const r = await api.post<{ analysis_id: string }>("/gap/syllabi", fd); nav(`/gap/analysis/${r.analysis_id}`); }
+    try {
+      const r = await api.post<{ task_id: string; analysis_id?: string }>("/gap/syllabi", fd);
+      const id = r.analysis_id ?? (await waitForTask(r.task_id, (t) => t.progress && setProgress(t.progress))).analysis_id;
+      nav(`/gap/analysis/${id}`);
+    }
     catch (x) { setErr((x as Error).message); setBusy(false); }
   };
 
@@ -61,7 +66,7 @@ export default function NewSyllabus() {
             <textarea className="input h-64 font-mono text-xs" required value={f.text} onChange={(e) => setF({ ...f, text: e.target.value })} placeholder="Paste the course description, learning objectives and weekly schedule…" />
           )}
         </Card>
-        <button className="btn-accent w-full py-3" disabled={busy}>{busy ? <><Loader2 className="h-4 w-4 animate-spin" />Analyzing against job market…</> : "Run gap analysis"}</button>
+        <button className="btn-accent w-full py-3" disabled={busy}>{busy ? <><Loader2 className="h-4 w-4 animate-spin" />{progress}</> : "Run gap analysis"}</button>
       </form>
     </div>
   );

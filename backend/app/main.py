@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
-from .routers import admin, auth, catalog, dashboard, evidence, forge, gap, graphmap, jobs, match, path
+from .routers import admin, auth, catalog, dashboard, evidence, forge, gap, graphmap, jobs, match, notifications, path, tasks
 from .seed import init_db
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -23,6 +23,10 @@ async def lifespan(_: FastAPI):
     if settings.ENV == "production" and (settings.JWT_SECRET == "change-me-in-production" or len(settings.JWT_SECRET) < 32):
         raise RuntimeError("Set a strong JWT_SECRET (32+ characters) before running in production")
     init_db()
+    from .services import tasks as tasksvc
+
+    if not settings.TASKS_INLINE:
+        tasksvc.start_workers()
     task = None
     if settings.JOB_SYNC_ENABLED:
         from .services.sync import scheduler_loop
@@ -31,6 +35,7 @@ async def lifespan(_: FastAPI):
     yield
     if task:
         task.cancel()
+    tasksvc.stop_workers()
 
 
 app = FastAPI(title="CometIQ API", version="1.0.0", lifespan=lifespan,
@@ -50,7 +55,7 @@ async def security_headers(request, call_next):
     return resp
 
 
-for r in (auth.router, admin.router, catalog.router, dashboard.router, gap.router, jobs.router, forge.router, path.router, path.advising, match.router, evidence.router, graphmap.router):
+for r in (auth.router, admin.router, catalog.router, dashboard.router, gap.router, jobs.router, forge.router, path.router, path.advising, match.router, evidence.router, graphmap.router, notifications.router, tasks.router):
     app.include_router(r)
 
 

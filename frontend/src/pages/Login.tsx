@@ -57,6 +57,7 @@ export default function Login() {
         <div><label className="label" htmlFor="email">Email</label><input id="email" className="input" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" /></div>
         <div><label className="label" htmlFor="pw">Password</label><input id="pw" className="input" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" /></div>
         <button className="btn-primary w-full" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
+        <div className="text-right text-sm"><Link to="/forgot-password" className="font-semibold text-comet-700 hover:underline">Forgot password?</Link></div>
       </form>
       <p className="mt-4 text-center text-sm text-slate-500">New here? <Link to="/register" className="font-semibold text-flame-600">Create an account</Link></p>
       {demo && <div className="mt-8 rounded-lg border border-slate-200 bg-slate-50 p-4">

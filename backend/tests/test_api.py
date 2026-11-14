@@ -95,7 +95,9 @@ def test_forge_generate_edit_approve(client, tokens):
     h = tokens["faculty"]
     syl = client.get("/api/gap/syllabi", headers=h).json()
     aid = next(s["latest"]["id"] for s in syl if s["code"] == "BUAN 6356")
-    d = client.post("/api/forge/drafts", headers=h, json={"analysis_id": aid, "weeks": 15, "framework": "AACSB"}).json()
+    t = client.post("/api/forge/drafts", headers=h, json={"analysis_id": aid, "weeks": 15, "framework": "AACSB"}).json()
+    assert client.get(f"/api/tasks/{t['task_id']}", headers=h).json()["status"] == "done"
+    d = client.get(f"/api/forge/drafts/{t['draft_id']}", headers=h).json()
     c = d["content"]
     assert len(c["modules"]) == 15 and sum(a["weight"] for a in c["assessments"]) == 100
     assert any(m["is_new"] for m in c["modules"]) and c["accreditation"]

@@ -28,6 +28,8 @@ def verify_password(pw: str, hashed: str) -> bool:
 
 def create_token(user: User) -> str:
     payload = {
+        "iat": int(datetime.now(timezone.utc).timestamp()),
+        "ims": int(datetime.now(timezone.utc).timestamp() * 1000),  # ms issue time, for revocation on password change
         "sub": user.id,
         "org": user.org_id,
         "role": user.role,
@@ -49,6 +51,15 @@ def current_user(
     user = db.get(User, payload.get("sub"))
     if not user or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found or disabled")
+    changed = user.password_changed_at
+    if changed is not None:
+        if changed.tzinfo is None:
+            changed = changed.replace(tzinfo=timezone.utc)
+        if payload.get("ims", 0) < int(changed.timestamp() * 1000):
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session expired — please sign in again")
+    from .services.tasks import current_org
+
+    current_org.set(user.org_id)  # used by the AI usage cap
     return user
 
 

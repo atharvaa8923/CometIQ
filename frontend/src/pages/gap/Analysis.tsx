@@ -2,7 +2,7 @@ import { BookOpen, Download, FileSpreadsheet, Lightbulb, RefreshCw, ScanSearch, 
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Badge, Card, PageHeader, ScoreRing, Spinner, ErrorBox } from "../../components/ui";
-import { api, download } from "../../lib/api";
+import { api, download, waitForTask } from "../../lib/api";
 import { useApi } from "../../lib/hooks";
 import { PRIORITY_COLOR, STATUS, StatusLegend, StatusTag, type Status } from "../../lib/viz";
 import { TargetSelect } from "./GapHome";
@@ -27,8 +27,11 @@ export default function Analysis() {
 
   const rerun = async () => {
     setBusy(true);
-    const r = await api.post<{ id: string }>(`/gap/syllabi/${a.syllabus.id}/analyze`, { target: target ?? a.target });
-    setBusy(false); nav(`/gap/analysis/${r.id}`);
+    try {
+      const r = await api.post<{ id?: string; task_id: string }>(`/gap/syllabi/${a.syllabus.id}/analyze`, { target: target ?? a.target });
+      const id = r.id ?? (await waitForTask(r.task_id)).analysis_id;
+      nav(`/gap/analysis/${id}`);
+    } finally { setBusy(false); }
   };
   const file = (a.syllabus.code ?? a.syllabus.title).replace(/\s+/g, "_");
 

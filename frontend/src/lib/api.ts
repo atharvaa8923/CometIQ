@@ -59,3 +59,18 @@ export async function download(path: string, filename: string) {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+export interface TaskStatus { id: string; status: "queued" | "running" | "done" | "failed"; progress: string | null; result: Record<string, unknown> | null; error: string | null }
+
+/** Poll a background task until it finishes. Resolves with its result; rejects if it failed. */
+export async function waitForTask(taskId: string, onProgress?: (t: TaskStatus) => void, timeoutMs = 10 * 60 * 1000): Promise<Record<string, unknown>> {
+  const start = Date.now();
+  for (let delay = 600; ; delay = Math.min(delay * 1.4, 3000)) {
+    const t = await api.get<TaskStatus>(`/tasks/${taskId}`);
+    onProgress?.(t);
+    if (t.status === "done") return t.result ?? {};
+    if (t.status === "failed") throw new ApiError(500, t.error ?? "The job failed");
+    if (Date.now() - start > timeoutMs) throw new ApiError(504, "This is taking longer than expected — check back in a minute.");
+    await new Promise((r) => setTimeout(r, delay));
+  }
+}

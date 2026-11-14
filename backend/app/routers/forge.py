@@ -10,7 +10,7 @@ from ..db import get_db
 from ..models import CourseSkill, ForgeDraft, GapAnalysis, Syllabus, User
 from ..security import audit, require_roles
 from ..services import forge as forgesvc
-from ..services import reports
+from ..services import reports, tasks
 from ..services import skills as sk
 
 router = APIRouter(prefix="/api/forge", tags=["cometforge"])
@@ -73,13 +73,22 @@ class GenerateIn(BaseModel):
     program_goals: list[str] | None = None
 
 
-@router.post("/drafts", status_code=201)
+@router.post("/drafts", status_code=202)
 def generate(body: GenerateIn, user: User = Depends(faculty), db: Session = Depends(get_db)):
     ga = db.get(GapAnalysis, body.analysis_id) if body.analysis_id else None
     sid = ga.syllabus_id if ga else body.syllabus_id
     if not sid:
         raise HTTPException(400, "Provide a gap analysis or syllabus")
-    syl = _syllabus(db, user, sid)
+    _syllabus(db, user, sid)  # permission check now; generation runs in the background
+    t = tasks.enqueue(db, "forge.generate", {"user_id": user.id, **body.model_dump()}, user.org_id, user.id)
+    return {"task_id": t.id, "status": t.status, **(t.result or {})}
+
+
+def run_generate(db: Session, user: User, body: GenerateIn, task=None) -> dict:
+    ga = db.get(GapAnalysis, body.analysis_id) if body.analysis_id else None
+    syl = _syllabus(db, user, ga.syllabus_id if ga else body.syllabus_id)
+    if task:
+        tasks.set_progress(db, task, "Designing modules, outcomes and assessments…")
     if not ga and syl.analyses:
         ga = syl.analyses[0]
     result = ga.result if ga else None
@@ -94,7 +103,7 @@ def generate(body: GenerateIn, user: User = Depends(faculty), db: Session = Depe
     db.add(d)
     audit(db, user, "forge.generate", syllabus=syl.title, version=version, engine=engine)
     db.commit()
-    return _out(db, d)
+    return {"draft_id": d.id}
 
 
 @router.get("/drafts/{did}")

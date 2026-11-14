@@ -2,7 +2,7 @@ import { BookOpen, Loader2, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Badge, Card, Empty, ErrorBox, Field, PageHeader, Spinner } from "../../components/ui";
-import { api } from "../../lib/api";
+import { api, waitForTask } from "../../lib/api";
 import { useApi } from "../../lib/hooks";
 import { PRIORITY_COLOR, StatusTag, type Status } from "../../lib/viz";
 
@@ -22,6 +22,7 @@ export default function ForgeNew() {
   const [goals, setGoals] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [progress, setProgress] = useState("Generating syllabus…");
 
   useEffect(() => { if (!aid && syllabi.data?.length) setAid(syllabi.data.find((s) => s.latest)?.latest?.id ?? ""); }, [syllabi.data, aid]);
   useEffect(() => { if (analysis.data) setFocus(analysis.data.gaps.filter((g) => g.priority === "critical" || g.priority === "high").slice(0, 6).map((g) => g.name)); }, [analysis.data]);
@@ -31,8 +32,9 @@ export default function ForgeNew() {
   const go = async () => {
     setBusy(true); setErr(null);
     try {
-      const d = await api.post<{ id: string }>("/forge/drafts", { analysis_id: aid, focus_skills: focus, weeks, framework, program_goals: goals.split("\n") });
-      nav(`/forge/${d.id}`);
+      const t = await api.post<{ task_id: string; draft_id?: string }>("/forge/drafts", { analysis_id: aid, focus_skills: focus, weeks, framework, program_goals: goals.split("\n") });
+      const id = t.draft_id ?? (await waitForTask(t.task_id, (s) => s.progress && setProgress(s.progress))).draft_id;
+      nav(`/forge/${id}`);
     } catch (e) { setErr((e as Error).message); setBusy(false); }
   };
 
@@ -70,7 +72,7 @@ export default function ForgeNew() {
         </div>
       </Card>
       <button className="btn-accent w-full py-3" onClick={go} disabled={busy || !aid}>
-        {busy ? <><Loader2 className="h-4 w-4 animate-spin" />Generating syllabus…</> : <><Sparkles className="h-4 w-4" />Generate updated syllabus</>}</button>
+        {busy ? <><Loader2 className="h-4 w-4 animate-spin" />{progress}</> : <><Sparkles className="h-4 w-4" />Generate updated syllabus</>}</button>
     </div>
   );
 }

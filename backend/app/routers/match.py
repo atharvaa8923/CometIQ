@@ -11,6 +11,7 @@ from ..services import jobs as jobsvc
 from ..services import match as matchsvc
 from ..services import parser
 from ..services import skills as sk
+from ..services.notify import notify
 from .jobs import job_out
 
 router = APIRouter(prefix="/api/match", tags=["cometmatch"])
@@ -120,6 +121,10 @@ def apply(jid: str, body: ApplyIn, user: User = Depends(student), db: Session = 
         db.add(app)
     app.score = score
     audit(db, user, "match.apply", job=j.title, score=score)
+    employer_user = db.get(User, j.employer_id)
+    if employer_user:
+        notify(db, employer_user, "match.applied", f"New applicant: {user.full_name}",
+               f"{user.full_name} applied to {j.title} with a {round(score)}% skill fit.", "/match")
     db.commit()
     return {"status": app.status, "score": score}
 
@@ -234,6 +239,13 @@ def set_status(jid: str, sid: str, body: StatusIn, user: User = Depends(employer
         db.add(a)
     a.status, a.score = body.status, score
     audit(db, user, "match.candidate.status", job=j.title, student=stu.email, status=body.status)
+    msg = {"shortlisted": (f"{j.company} invited you to apply", f"{j.company} shortlisted you for {j.title}. Open CometMatch to accept the invitation."),
+           "interview": (f"Interview stage: {j.title}", f"{j.company} moved your application for {j.title} to the interview stage."),
+           "offer": (f"Offer: {j.title}", f"Congratulations — {j.company} marked an offer for {j.title}."),
+           "hired": (f"Hired: {j.title}", f"{j.company} marked you as hired for {j.title}."),
+           "rejected": (f"Update on {j.title}", f"{j.company} decided not to move forward with your application for {j.title}.")}.get(body.status)
+    if msg:
+        notify(db, stu, f"match.{body.status}", msg[0], msg[1], "/match")
     db.commit()
     return {"status": a.status}
 

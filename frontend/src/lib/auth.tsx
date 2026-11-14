@@ -3,7 +3,7 @@ import { api, tokenStore } from "./api";
 
 export type Role = "admin" | "faculty" | "student" | "employer" | "advisor";
 export interface User {
-  id: string; email: string; full_name: string; role: Role; company?: string | null;
+  id: string; email: string; full_name: string; role: Role; company?: string | null; email_notifications?: boolean; consent_version?: string | null;
   org: { id: string; name: string; slug: string; plan: string };
 }
 interface AuthCtx {

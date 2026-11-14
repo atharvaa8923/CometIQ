@@ -13,6 +13,7 @@ from ..db import get_db
 from ..models import Course, CourseSkill, Evidence, EvidenceFile, Skill, StudentCourse, User
 from ..security import audit, current_user, require_roles
 from ..services import skills as sk
+from ..services.notify import notify
 
 router = APIRouter(prefix="/api/evidence", tags=["evidence"])
 student = require_roles("student")
@@ -172,5 +173,12 @@ def review(eid: str, body: ReviewIn, user: User = Depends(reviewer), db: Session
         else:
             db.add(StudentCourse(user_id=e.student_id, course_id=e.course_id, status="completed", term=e.issued_on))
     audit(db, user, f"evidence.{body.decision}", title=e.title, student=e.student.email, bonus=e.bonus_points)
+    if body.decision == "verified":
+        notify(db, e.student, "evidence.verified", f"Verified: {e.title}",
+               f"{user.full_name} verified your {e.kind}. Its skills now count fully in CometMatch"
+               + (f", and it adds +{e.bonus_points} bonus points to jobs that need them." if e.bonus_points else "."), "/match")
+    else:
+        notify(db, e.student, "evidence.rejected", f"Not verified: {e.title}",
+               f"{user.full_name} could not verify this item: {body.note}", "/match")
     db.commit()
     return _out(db, e, True)

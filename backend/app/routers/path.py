@@ -14,6 +14,7 @@ from ..models import Concentration, Course, Evidence, PlanReview, Program, Stude
 from ..security import audit, require_roles
 from ..services import path as pathsvc
 from ..services import reports
+from ..services.notify import notify, notify_role
 
 router = APIRouter(prefix="/api/path", tags=["cometpath"])
 student = require_roles("student")
@@ -234,6 +235,9 @@ def submit_review(body: SubmitIn, user: User = Depends(student), db: Session = D
     if not pending:
         db.add(r)
     audit(db, user, "path.review.submit")
+    notify_role(db, user.org_id, "advisor", "path.review.submitted", f"Plan to review: {user.full_name}",
+                f"{user.full_name} submitted a degree plan ({snapshot['program']}) for review."
+                + (f" Note: {body.note}" if body.note else ""), "/advising")
     db.commit()
     return _review_out(r, db)
 
@@ -328,6 +332,9 @@ def decide(rid: str, body: DecisionIn, user: User = Depends(advisor), db: Sessio
         raise HTTPException(400, "Explain which changes are needed")
     r.status, r.advisor_note, r.advisor_id, r.reviewed_at = body.decision, body.note, user.id, datetime.now(timezone.utc)
     audit(db, user, f"path.review.{body.decision}", student=r.student.email)
+    notify(db, r.student, f"path.review.{body.decision}",
+           "Your degree plan was approved" if body.decision == "approved" else "Your advisor requested changes to your plan",
+           f"{user.full_name}: {body.note}" if body.note else f"Reviewed by {user.full_name}.", "/path")
     db.commit()
     return _review_out(r, db)
 

@@ -24,6 +24,25 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     AI_MODEL: str = "claude-opus-5-5"
 
+    # Public URL of this deployment (used in email links)
+    APP_URL: str = "http://localhost:8000"
+    # Email: "log" (development: printed to the log), "resend" or "smtp"
+    EMAIL_PROVIDER: str = "log"
+    EMAIL_FROM: str = "CometIQ <no-reply@cometiq.app>"
+    RESEND_API_KEY: str = ""
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_STARTTLS: bool = True
+    PASSWORD_RESET_MINUTES: int = 30
+
+    # Background jobs: run in-process worker threads (set TASKS_INLINE=true to run synchronously, e.g. in tests)
+    TASK_WORKERS: int = 2
+    TASKS_INLINE: bool = False
+    # Claude cost control: max Claude calls per organization per day (0 = unlimited)
+    AI_DAILY_LIMIT_PER_ORG: int = 500
+
     # UTD Nebula Labs API (live sections & grade distributions) — https://api.utdnebula.com
     NEBULA_API_KEY: str = ""
     NEBULA_BASE_URL: str = "https://api.utdnebula.com"

@@ -29,11 +29,43 @@ def _get_client():
     return _client
 
 
+def _within_cap() -> bool:
+    """Count this call against the organization's daily Claude budget (AI_DAILY_LIMIT_PER_ORG)."""
+    from datetime import datetime, timezone
+
+    from sqlalchemy import select
+
+    from ..db import SessionLocal
+    from ..models import AiUsage
+    from .tasks import current_org
+
+    limit, org = get_settings().AI_DAILY_LIMIT_PER_ORG, current_org.get()
+    if not limit or not org:
+        return True
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    with SessionLocal() as db:
+        row = db.scalar(select(AiUsage).where(AiUsage.org_id == org, AiUsage.day == day))
+        if row and row.calls >= limit:
+            return False
+        if row:
+            row.calls += 1
+        else:
+            db.add(AiUsage(org_id=org, day=day, calls=1))
+        try:
+            db.commit()
+        except Exception:  # concurrent first insert for the day
+            db.rollback()
+    return True
+
+
 def structured(system: str, prompt: str, schema: type[T], effort: str = "medium",
                max_tokens: int = 32000) -> T | None:
     """Ask Claude for a response matching `schema`. Returns None on any failure
     (missing key, API error, refusal) so callers fall back to the built-in engine."""
     if not enabled():
+        return None
+    if not _within_cap():
+        log.warning("Daily Claude limit reached for this organization; using built-in engine")
         return None
     try:
         import anthropic

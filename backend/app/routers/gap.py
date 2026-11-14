@@ -10,7 +10,7 @@ from ..db import get_db
 from ..models import Course, GapAnalysis, Job, Program, Syllabus, SyllabusSkill, User
 from ..security import audit, require_roles
 from ..services import gap as gapsvc
-from ..services import parser, reports
+from ..services import parser, reports, tasks
 from ..services import skills as sk
 
 router = APIRouter(prefix="/api/gap", tags=["cometgap"])
@@ -74,17 +74,31 @@ async def upload_syllabus(
                    code=(code or (course.code if course else "")).strip().upper() or None, title=title.strip(),
                    semester=semester.strip() or None, filename=filename, raw_text=raw, topics=parser.extract_topics(raw))
     db.add(syl)
-    db.flush()
-    found, engine = sk.extract(raw, kind="course syllabus")
-    ids = sk.skill_ids(db, found)
-    for name, info in found.items():
-        if name in ids:
-            syl.skills.append(SyllabusSkill(skill_id=ids[name], mentions=info["mentions"], evidence=info.get("evidence")))
-    db.flush()
-    ga = gapsvc.analyze(db, syl, target)
-    audit(db, user, "gap.syllabus.upload", syllabus=syl.title, score=ga.score, extraction=engine)
+    audit(db, user, "gap.syllabus.upload", syllabus=syl.title)
     db.commit()
-    return {"id": syl.id, "analysis_id": ga.id, "score": ga.score}
+    t = tasks.enqueue(db, "gap.analyze", {"syllabus_id": syl.id, "target": target, "extract": True}, user.org_id, user.id)
+    return {"id": syl.id, "task_id": t.id, "status": t.status, **(t.result or {})}
+
+
+def run_analysis(db: Session, syllabus_id: str, target: str, top_n: int = 30, extract: bool = False, task=None) -> dict:
+    """Skill extraction (optional) + gap analysis. Runs inside a background task."""
+    syl = db.get(Syllabus, syllabus_id)
+    if extract:
+        if task:
+            tasks.set_progress(db, task, "Reading the syllabus and extracting skills…")
+        found, engine = sk.extract(syl.raw_text, kind="course syllabus")
+        ids = sk.skill_ids(db, found)
+        syl.skills.clear()
+        db.flush()
+        for name, info in found.items():
+            if name in ids:
+                syl.skills.append(SyllabusSkill(skill_id=ids[name], mentions=info["mentions"], evidence=info.get("evidence")))
+        db.flush()
+    if task:
+        tasks.set_progress(db, task, "Comparing with current job postings…")
+    ga = gapsvc.analyze(db, syl, target, top_n)
+    db.commit()
+    return {"analysis_id": ga.id, "score": ga.score}
 
 
 @router.get("/syllabi/{sid}")
@@ -116,9 +130,9 @@ def reanalyze(sid: str, body: AnalyzeIn, user: User = Depends(faculty), db: Sess
     s = _own(db, user, sid)
     if body.target not in ("auto", gapsvc.ALL, *ROLE_FAMILIES):
         raise HTTPException(400, "Unknown target")
-    ga = gapsvc.analyze(db, s, body.target, max(10, min(body.top_n, 60)))
-    db.commit()
-    return {"id": ga.id, "score": ga.score}
+    t = tasks.enqueue(db, "gap.analyze", {"syllabus_id": s.id, "target": body.target, "top_n": max(10, min(body.top_n, 60))},
+                      user.org_id, user.id)
+    return {"task_id": t.id, "status": t.status, **({"id": t.result["analysis_id"], "score": t.result["score"]} if t.result else {})}
 
 
 def _analysis(db: Session, user: User, aid: str) -> tuple[Syllabus, GapAnalysis]:

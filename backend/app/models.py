@@ -44,6 +44,10 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(20), index=True)
     company: Mapped[str | None] = mapped_column(String(200))  # employers
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    email_notifications: Mapped[bool] = mapped_column(Boolean, default=True)
+    password_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # tokens issued earlier are revoked
+    consent_version: Mapped[str | None] = mapped_column(String(20))  # privacy notice / terms version accepted
+    consent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     org: Mapped[Organization] = relationship()
@@ -351,6 +355,58 @@ class SyncRun(Base):
     results: Mapped[dict] = mapped_column(JSON, default=dict)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class PasswordReset(Base):
+    """Single-use password reset token (only its SHA-256 hash is stored)."""
+    __tablename__ = "password_resets"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Notification(Base):
+    """In-app notification (also emailed when the user has email notifications on)."""
+    __tablename__ = "notifications"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(40))
+    title: Mapped[str] = mapped_column(String(300))
+    body: Mapped[str] = mapped_column(Text, default="")
+    link: Mapped[str | None] = mapped_column(String(300))
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
+class Task(Base):
+    """Background job (AI analysis, syllabus generation, email). Claimed atomically so several workers can run."""
+    __tablename__ = "tasks"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    org_id: Mapped[str | None] = mapped_column(String(32), index=True)
+    user_id: Mapped[str | None] = mapped_column(String(32), index=True)
+    kind: Mapped[str] = mapped_column(String(40))
+    status: Mapped[str] = mapped_column(String(20), default="queued", index=True)  # queued | running | done | failed
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    result: Mapped[dict | None] = mapped_column(JSON)
+    error: Mapped[str | None] = mapped_column(Text)
+    progress: Mapped[str | None] = mapped_column(String(200))
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AiUsage(Base):
+    """Claude calls per organization per day (enforces AI_DAILY_LIMIT_PER_ORG)."""
+    __tablename__ = "ai_usage"
+    __table_args__ = (UniqueConstraint("org_id", "day"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    org_id: Mapped[str] = mapped_column(String(32), index=True)
+    day: Mapped[str] = mapped_column(String(10))
+    calls: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class AuditLog(Base):

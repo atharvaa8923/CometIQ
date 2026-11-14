@@ -10,6 +10,7 @@ import Home from "./pages/Home";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import ResetPassword, { ForgotPassword } from "./pages/ResetPassword";
 import Analysis from "./pages/gap/Analysis";
 import ForgeEditor from "./pages/forge/ForgeEditor";
 import ForgeHome from "./pages/forge/ForgeHome";
@@ -36,6 +37,8 @@ export default function App() {
     <Routes>
       <Route path="/" element={user ? <Navigate to="/app" replace /> : <Landing />} />
       <Route path="/login" element={user ? <Navigate to="/app" replace /> : <Login />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/register" element={user ? <Navigate to="/app" replace /> : <Register />} />
       <Route element={<Guard><Layout /></Guard>}>
         <Route path="/app" element={<Home />} />

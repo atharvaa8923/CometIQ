@@ -7,6 +7,7 @@ _tmp = tempfile.mkdtemp()
 os.environ["DATABASE_URL"] = os.environ.get("TEST_DATABASE_URL", f"sqlite:///{_tmp}/test.db")
 os.environ["ANTHROPIC_API_KEY"] = ""  # always test the deterministic built-in engine
 os.environ["JOB_SYNC_ENABLED"] = "false"
+os.environ["TASKS_INLINE"] = "true"  # background tasks run synchronously in tests
 os.environ["JWT_SECRET"] = "test-secret-that-is-long-enough-for-hs256!!"
 
 from fastapi.testclient import TestClient  # noqa: E402
