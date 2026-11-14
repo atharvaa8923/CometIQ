@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from .config import get_settings
 from .data.sample_jobs import sample_jobs
 from .data.taxonomy import SKILLS
-from .db import Base, SessionLocal, engine
+from .db import SessionLocal
 from .models import (
     Concentration, ConcentrationCourse, Course, CoursePrereq, Organization, Program,
     ProgramCore, Skill, StudentCourse, StudentProfile, User,
@@ -239,7 +239,9 @@ def ensure_bootstrap_admin(db: Session) -> None:
 
 
 def init_db() -> None:
-    Base.metadata.create_all(engine)
+    from .migrate import migrate
+
+    migrate()
     with SessionLocal() as db:
         sync_skills(db)
         if not db.scalar(select(func.count(Organization.id))):

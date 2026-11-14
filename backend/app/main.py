@@ -4,17 +4,19 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from . import monitoring
 from .config import get_settings
 from .routers import admin, auth, catalog, dashboard, evidence, forge, gap, graphmap, jobs, match, notifications, path, privacy, tasks
 from .seed import init_db
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 settings = get_settings()
+monitoring.setup_logging()
+monitoring.setup_sentry()
 FRONTEND = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
 
@@ -43,6 +45,9 @@ app = FastAPI(title="CometIQ API", version="1.0.0", lifespan=lifespan,
 app.add_middleware(CORSMiddleware, allow_origins=[o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()],
                    allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
+app.middleware("http")(monitoring.request_id_middleware)
+
+
 @app.middleware("http")
 async def security_headers(request, call_next):
     resp = await call_next(request)
@@ -61,7 +66,37 @@ for r in (auth.router, admin.router, catalog.router, dashboard.router, gap.route
 
 @app.get("/api/health")
 def health():
+    """Liveness: the process is up (cheap; used by the load balancer)."""
     return {"status": "ok", "app": settings.APP_NAME}
+
+
+@app.get("/api/health/ready")
+def ready():
+    """Readiness: database reachable, task queue and job sync status (for uptime monitors)."""
+    ok, checks = monitoring.readiness()
+    return JSONResponse({"status": "ok" if ok else "degraded", **checks}, status_code=200 if ok else 503)
+
+
+_client_errors: dict[str, list[float]] = {}
+
+
+@app.post("/api/client-errors", status_code=204)
+async def client_error(request: Request):
+    """Browser JavaScript errors (rate-limited, size-capped, no personal data expected)."""
+    import time as _t
+
+    ip = request.client.host if request.client else "?"
+    recent = [t for t in _client_errors.get(ip, []) if _t.time() - t < 60]
+    if len(recent) >= 10:
+        return Response(status_code=204)
+    _client_errors[ip] = recent + [_t.time()]
+    body = (await request.body())[:4000].decode("utf-8", "replace")
+    logging.getLogger("cometiq.client").warning("Browser error: %s", body)
+    if settings.SENTRY_DSN:
+        import sentry_sdk
+
+        sentry_sdk.capture_message(f"Browser error: {body[:500]}", level="warning")
+    return Response(status_code=204)
 
 
 # ── Serve the built React app (single deployable) ──────────────────────────────

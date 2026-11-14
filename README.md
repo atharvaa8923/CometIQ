@@ -136,10 +136,24 @@ see skill evidence rather than full resume text.
 > ⚠️ The original JSOM planner zip contains a `.env` with what looks like a live Nebula API key. It was **not**
 > copied here. Consider rotating it.
 
+### Database migrations
+The schema is managed with Alembic (`backend/migrations`) and upgraded automatically when the app starts. After changing
+`app/models.py`:
+```bash
+cd backend && ../.venv/bin/alembic revision --autogenerate -m "describe the change"   # review the generated file
+../.venv/bin/python -m pytest -q   # test_migrations fails if models and migrations disagree
+```
+
+### Production readiness
+Password reset and notification emails, a background job queue for AI work with a per-institution Claude budget, privacy
+controls (consent, data export, account deletion), WCAG 2.1 AA accessibility (axe: 0 violations), monitoring (request IDs,
+JSON logs, Sentry, readiness checks), full UTD catalog and official-syllabus import via Nebula. See
+[LAUNCH-CHECKLIST.md](LAUNCH-CHECKLIST.md) for the institutional steps before real students use it.
+
 ### What has and hasn't been tested live
-- Tested end to end in a browser and by 32 API tests (SQLite and PostgreSQL): all four modules, roles, evidence verification,
+- Tested end to end in a browser and by 62 API tests (SQLite and PostgreSQL): all four modules, roles, evidence verification,
   advisor reviews, what-if, PDFs, talent search, production seeding.
-- **Claude, Nebula, Adzuna and USAJobs** are implemented against their documented APIs and tested with fakes/fixtures, but have
+- **Claude, Nebula (catalog, sections, grades, syllabus links), Adzuna, USAJobs, Resend/SMTP email and Sentry** are implemented against their documented APIs and tested with fakes/fixtures, but have
   **not yet been called live** (no keys and/or the hosts were unreachable from the build environment). After deploying, use
   Organization → *Test connection* and *Sync now* to confirm each one.
 

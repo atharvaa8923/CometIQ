@@ -45,3 +45,17 @@ services:
         sync: false
       - key: JOB_SYNC_HOUR_UTC
         value: "7"
+      - key: APP_URL
+        sync: false               # e.g. https://cometiq.yourdomain.edu (used in email links)
+      - key: EMAIL_PROVIDER
+        value: resend
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false               # e.g. CometIQ <no-reply@cometiq.yourdomain.edu> (verified domain)
+      - key: SENTRY_DSN
+        sync: false
+      - key: AI_DAILY_LIMIT_PER_ORG
+        value: "500"
+      - key: LOG_FORMAT
+        value: json

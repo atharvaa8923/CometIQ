@@ -34,6 +34,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     try {
       const j = await res.json();
       msg = typeof j.detail === "string" ? j.detail : Array.isArray(j.detail) ? j.detail.map((d: { msg: string }) => d.msg).join("; ") : msg;
+      if (res.status >= 500 && j.request_id) msg += ` (reference ${j.request_id})`;
     } catch { /* not json */ }
     throw new ApiError(res.status, msg);
   }

@@ -17,6 +17,7 @@ const RUN_COLOR: Record<string, string> = { ok: "green", partial: "orange", fail
 export default function Integrations() {
   const toast = useToast();
   const { data, loading, reload } = useApi<Data>("/admin/integrations");
+  const health = useApi<{ status: string; database: string; tasks?: { queued: number; running: number; failed_24h: number }; integrations: Record<string, boolean> }>("/health/ready");
   const [aiResult, setAiResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
   const [gradOnly, setGradOnly] = useState(true);
@@ -39,6 +40,17 @@ export default function Integrations() {
 
   return (
     <div className="space-y-6">
+      {health.data && (
+        <Card title="System health" actions={<button className="btn-ghost btn-sm" onClick={health.reload}><RefreshCw className="h-4 w-4" />Refresh</button>}>
+          <div className="grid gap-3 text-sm md:grid-cols-4">
+            <div><div className="label">Status</div><Badge color={health.data.status === "ok" ? "green" : "red"}>{health.data.status === "ok" ? "Healthy" : "Degraded"}</Badge></div>
+            <div><div className="label">Database</div>{health.data.database}</div>
+            <div><div className="label">Background jobs</div>{health.data.tasks ? `${health.data.tasks.queued} queued · ${health.data.tasks.running} running` : "—"}
+              {!!health.data.tasks?.failed_24h && <div className="text-xs text-red-700">{health.data.tasks.failed_24h} failed in the last 24 h — see server log</div>}</div>
+            <div><div className="label">Integrations</div><div className="flex flex-wrap gap-1">{Object.entries(health.data.integrations).map(([k, v]) => <Badge key={k} color={v ? "green" : "slate"}>{k} {v ? "on" : "off"}</Badge>)}</div></div>
+          </div>
+          <p className="mt-3 text-xs text-slate-500">Point an uptime monitor (e.g. UptimeRobot or Better Stack) at <code>/api/health/ready</code>; it returns 503 if the database is unreachable.</p>
+        </Card>)}
       <Card title="Live job market sources" actions={<button className="btn-primary btn-sm" onClick={syncNow} disabled={running}>{running ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}{running ? "Syncing…" : "Sync now"}</button>}>
         <div className="grid gap-3 md:grid-cols-3">
           {Object.entries(data.job_sources).map(([k, v]) => (

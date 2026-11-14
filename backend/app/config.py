@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     AI_MODEL: str = "claude-opus-5-5"
 
+    # Monitoring
+    SENTRY_DSN: str = ""                 # optional error tracking (sentry.io or self-hosted)
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.0
+    LOG_FORMAT: str = "text"             # "json" for log aggregators
+
     # Public URL of this deployment (used in email links)
     APP_URL: str = "http://localhost:8000"
     # Email: "log" (development: printed to the log), "resend" or "smtp"

@@ -19,6 +19,9 @@ database, so no persistent disk is needed.
    | `NEBULA_API_KEY` | From UTD Nebula Labs (Discord). Live sections & grades |
    | `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` | developer.adzuna.com (free tier). Business-role postings |
    | `USAJOBS_API_KEY` / `USAJOBS_EMAIL` | developer.usajobs.gov (free). Federal postings |
+   | `APP_URL` | Your public URL (used in email links) |
+   | `RESEND_API_KEY` / `EMAIL_FROM` | resend.com (free tier). Password reset and notification emails; verify your domain (SPF/DKIM) |
+   | `SENTRY_DSN` | sentry.io project (free tier). Error alerts; personal data is scrubbed |
 
    `JWT_SECRET` is generated automatically. Leave unused keys empty; each feature falls back gracefully.
 4. Deploy. On first start CometIQ creates the institution, loads the UTD JSOM catalog (39 programs, 331 courses),
@@ -54,10 +57,19 @@ docker run -p 8000:8000 \
   for a throwaway demo site.
 - `SEED_DEMO=false` (the Render default) creates no demo users; the login page hides the demo buttons.
 
+## Before real users
+Work through [LAUNCH-CHECKLIST.md](LAUNCH-CHECKLIST.md): UTD security/FERPA/legal reviews, email domain, monitoring,
+backup restore test and pilot setup.
+
 ## Operations
 - **Backups:** managed PostgreSQL backups (Render: daily; enable point-in-time recovery on paid plans).
-- **Logs:** the platform's log viewer; sync runs and Claude errors are logged under `cometiq.sync` / `cometiq.ai`.
-- **Upgrades:** push to GitHub → auto-deploy. New tables are created automatically at start; for column changes on an
-  existing database, add Alembic migrations before upgrading a production instance.
+- **Health:** `/api/health` (liveness, used by Render) and `/api/health/ready` (database, job queue, last sync; 503 when
+  degraded): point an uptime monitor at it. Admins see the same under Organization → System health.
+- **Logs:** JSON logs (`LOG_FORMAT=json`) with a request ID on every line; users see the same ID ("reference …") on errors.
+  Unhandled errors and browser errors go to Sentry when `SENTRY_DSN` is set.
+- **Background jobs:** AI analysis, syllabus generation, catalog/syllabus imports and emails run in a database-backed queue
+  (`TASK_WORKERS` threads per instance; jobs survive restarts and are claimed once across instances).
+- **Upgrades:** push to GitHub → auto-deploy. Database migrations (Alembic) run automatically at start, one instance at a
+  time (PostgreSQL advisory lock).
 - **Security:** bcrypt passwords, JWT (24 h), role-based access on every endpoint, per-organization data isolation,
   login rate limiting, security headers, uploads checked by file signature (PDF/PNG/JPG/WebP, 10 MB max).
