@@ -24,7 +24,7 @@ def client():
 @pytest.fixture(scope="session")
 def tokens(client):
     out = {}
-    for role in ("admin", "faculty", "student", "employer"):
+    for role in ("admin", "faculty", "student", "employer", "advisor"):
         r = client.post("/api/auth/login", json={"email": f"{role}@cometiq.app", "password": PW})
         assert r.status_code == 200, r.text
         out[role] = {"Authorization": f"Bearer {r.json()['token']}"}

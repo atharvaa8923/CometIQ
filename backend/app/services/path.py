@@ -70,6 +70,34 @@ def next_terms(start: str, n: int, summer: bool) -> list[str]:
     return out
 
 
+def term_key(term: str | None) -> tuple[int, int]:
+    try:
+        season, year = (term or "").split()
+        return int(year), SEASONS.index(season)
+    except (ValueError, IndexError):
+        return 0, 0
+
+
+def plan_start(prof, rows: dict) -> str:
+    """Plan from the term after the latest completed/enrolled term (or the start term if later)."""
+    taken = [sc.term for sc in rows.values() if sc.status in TAKEN and sc.term and term_key(sc.term) != (0, 0)]
+    if not taken:
+        return prof.start_term
+    last = max(taken, key=term_key)
+    nxt = next_terms(last, 2, prof.include_summer)[1]
+    return max(nxt, prof.start_term, key=term_key)
+
+
+def saved_plan(db: Session, user_id: str) -> list[dict]:
+    """The student's saved plan (planned courses) grouped by term, in order."""
+    rows = db.scalars(select(StudentCourse).where(StudentCourse.user_id == user_id, StudentCourse.status == "planned"))
+    terms: dict[str, list] = defaultdict(list)
+    for sc in rows:
+        terms[sc.term or "Unscheduled"].append({"id": sc.course_id, "code": sc.course.code, "title": sc.course.title, "credits": sc.course.credits})
+    return [{"term": t, "credits": sum(c["credits"] for c in cs), "courses": sorted(cs, key=lambda c: c["code"])}
+            for t, cs in sorted(terms.items(), key=lambda kv: term_key(kv[0]) if kv[0] != "Unscheduled" else (9999, 0))]
+
+
 # ── career demand ──────────────────────────────────────────────────────────────
 def career_vector(db: Session, goal: str | None, org_id: str) -> tuple[dict[int, dict], int]:
     if not goal:
@@ -204,7 +232,11 @@ def generate_plan(db: Session, prof: StudentProfile, rows: dict[str, StudentCour
 
     # 2. electives up to total SCH, best career fit first
     core, electives = program_pool(program, prof.concentration_id)
-    total_needed = (program.total_sch or 36) - sum(cred(c) for c in done if c in g.courses)
+    # only completed courses that belong to this program count toward its hours
+    all_program = core | {cc.course_id for c in program.concentrations for cc in c.courses}
+    counted = {c for c in done if c in all_program and c in g.courses}
+    not_counted = sorted((g.courses[c].code for c in done - counted if c in g.courses))
+    total_needed = (program.total_sch or 36) - sum(cred(c) for c in counted)
     planned_sch = sum(cred(c) for c in chosen)
     ranked = sorted((c for c in electives - done - set(chosen) if c in g.courses),
                     key=lambda c: (-score(c), len(unmet_groups(g, c, done)), g.courses[c].code))
@@ -234,7 +266,7 @@ def generate_plan(db: Session, prof: StudentProfile, rows: dict[str, StudentCour
             break
 
     # 4. schedule into terms respecting prerequisites and credit load
-    terms = next_terms(prof.start_term, 12, prof.include_summer)
+    terms = next_terms(plan_start(prof, rows), 12, prof.include_summer)
     placed: dict[str, int] = {}
     remaining = set(chosen)
     plan_terms = []
@@ -269,10 +301,16 @@ def generate_plan(db: Session, prof: StudentProfile, rows: dict[str, StudentCour
 
     suggestion = best_concentration(program, prof.concentration_id, g, vec)
     readiness = career_readiness(g, done | set(chosen), done, vec, n_jobs, prof.career_goal)
-    total_sch = sum(cred(c) for c in done) + sum(cred(c) for c in chosen)
+    total_sch = sum(cred(c) for c in counted) + sum(cred(c) for c in chosen)
+    if not_counted:
+        warnings.insert(0, f"{', '.join(not_counted)} {'does' if len(not_counted) == 1 else 'do'} not count toward this program "
+                           "(may count as a free elective with advisor approval).")
     return {"terms": plan_terms, "graduation_term": plan_terms[-1]["term"] if plan_terms else None, "planned_sch": sum(cred(c) for c in chosen),
             "total_sch": total_sch, "required_sch": program.total_sch, "warnings": list(dict.fromkeys(warnings)), "readiness": readiness,
-            "concentration_suggestion": suggestion}
+            "concentration_suggestion": suggestion, "counted_courses": sorted(g.courses[c].code for c in counted),
+            "not_counted_courses": not_counted, "program": {"id": program.id, "name": program.name},
+            "concentration": next(({"id": c.id, "name": c.name} for c in program.concentrations if c.id == prof.concentration_id), None),
+            "career_goal": prof.career_goal}
 
 
 def best_concentration(program: Program, current: str | None, g: Graph, vec: dict[int, dict]) -> dict | None:

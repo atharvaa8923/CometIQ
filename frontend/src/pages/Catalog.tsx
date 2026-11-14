@@ -1,5 +1,6 @@
 import { ExternalLink, Search } from "lucide-react";
 import { useState } from "react";
+import LiveCourse from "../components/LiveCourse";
 import { Badge, Card, Modal, PageHeader, Spinner, Tabs } from "../components/ui";
 import { useApi } from "../lib/hooks";
 
@@ -36,6 +37,7 @@ export function CourseModal({ id, onClose }: { id: string | null; onClose: () =>
           <div><div className="label">Skills taught (knowledge graph)</div>
             <div className="flex flex-wrap gap-1">{data.skills.length ? data.skills.map((s) => <Badge key={s.id} color={s.weight >= 1 ? "green" : "slate"} title={s.category}>{s.name}</Badge>) : <span className="text-slate-500">No mapped skills yet</span>}</div>
           </div>
+          <LiveCourse courseId={data.id} />
         </div>
       )}
     </Modal>

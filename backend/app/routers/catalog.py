@@ -7,14 +7,14 @@ from ..data.taxonomy import CATEGORIES, ROLE_FAMILIES
 from ..db import get_db
 from ..models import Course, CoursePrereq, Job, JobSkill, Program, Skill, User
 from ..security import current_user
-from ..services import ai
+from ..services import ai, nebula
 
 router = APIRouter(prefix="/api", tags=["catalog"])
 
 
 @router.get("/meta")
 def meta(user: User = Depends(current_user)):
-    return {"ai_enabled": ai.enabled(), "role_families": list(ROLE_FAMILIES), "categories": CATEGORIES}
+    return {"ai_enabled": ai.enabled(), "nebula_enabled": nebula.enabled(), "role_families": list(ROLE_FAMILIES), "categories": CATEGORIES}
 
 
 @router.get("/skills")
@@ -75,3 +75,12 @@ def course(cid: str, user: User = Depends(current_user), db: Session = Depends(g
             "unlocks": [course_brief(u) for u in unlocks],
             "skills": [{"id": cs.skill.id, "name": cs.skill.name, "category": cs.skill.category, "weight": cs.weight,
                         "source": cs.source} for cs in c.skills]}
+
+
+@router.get("/courses/{cid}/live")
+def course_live(cid: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Live sections, professors and grade distributions from UTD Nebula (cached 6 h)."""
+    c = db.get(Course, cid)
+    if not c or c.org_id != user.org_id:
+        raise HTTPException(404, "Course not found")
+    return {"course": c.code, **nebula.course_live(c.subject, c.code.split()[-1])}

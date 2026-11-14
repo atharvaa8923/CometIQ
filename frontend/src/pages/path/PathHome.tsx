@@ -1,8 +1,9 @@
-import { AlertTriangle, CalendarRange, CheckCircle2, Circle, CircleDot, Compass, GraduationCap, Lock, Plus, Route, Save, Sparkles, Target, Trash2, Wand2 } from "lucide-react";
+import { AlertTriangle, CalendarRange, CheckCircle2, Circle, CircleDot, ClipboardCheck, Compass, Download, GraduationCap, Lock, Plus, Route, Save, Send, Sparkles, Target, Trash2, Wand2 } from "lucide-react";
+import WhatIf from "./WhatIf";
 import { useEffect, useState } from "react";
 import { Badge, Card, Empty, ErrorBox, Field, PageHeader, ScoreBar, Spinner, Stat, Tabs } from "../../components/ui";
 import { CourseModal } from "../Catalog";
-import { api } from "../../lib/api";
+import { api, download } from "../../lib/api";
 import { useApi } from "../../lib/hooks";
 import { useToast } from "../../lib/toast";
 
@@ -18,6 +19,7 @@ interface Overview {
 }
 interface PlanCourse { id: string; code: string; title: string; credits: number; reason: string; is_core: boolean; skills: string[] }
 interface Plan { concentration_suggestion: { id: string; name: string; current: string | null; reason: string } | null; terms: { term: string; credits: number; courses: PlanCourse[] }[]; graduation_term: string | null; planned_sch: number; total_sch: number; required_sch: number; warnings: string[]; readiness: Readiness }
+interface Review { id: string; status: "submitted" | "approved" | "changes_requested"; student_note: string | null; advisor_note: string | null; advisor: string | null; reviewed_at: string | null; changed_since: boolean }
 interface Rec { id: string; code: string; title: string; credits: number; is_core: boolean; career_score: number; reasons: string[]; missing_prereqs?: string[] }
 
 const READY = {
@@ -81,7 +83,14 @@ export default function PathHome() {
   const prof = useApi<Profile & { career_goals: string[] }>("/path/profile");
   const ov = useApi<Overview>("/path/overview");
   const recs = useApi<{ eligible: Rec[]; blocked: Rec[]; career_goal: string | null }>("/path/recommendations");
-  const [tab, setTab] = useState<"plan" | "progress" | "recs" | "setup">("plan");
+  const [tab, setTab] = useState<"plan" | "progress" | "recs" | "whatif" | "setup">("plan");
+  const review = useApi<Review | null>("/path/review");
+  const savedPlan = useApi<{ term: string; credits: number; courses: { id: string; code: string; title: string; credits: number }[] }[]>("/path/saved");
+  const [note, setNote] = useState("");
+  const submitReview = async () => {
+    try { await api.post("/path/review", { note: note || null }); toast("Plan sent to your advisor"); setNote(""); review.reload(); }
+    catch (e) { toast((e as Error).message, "error"); }
+  };
   const [plan, setPlan] = useState<Plan | null>(null);
   const [busy, setBusy] = useState(false);
   const [course, setCourse] = useState<string | null>(null);
@@ -91,7 +100,7 @@ export default function PathHome() {
   const reloadAll = () => { prof.reload(); ov.reload(); recs.reload(); };
   const generate = async (save = false) => {
     setBusy(true);
-    try { const p = await api.post<Plan>(`/path/plan?save=${save}`); setPlan(p); if (save) { toast("Plan saved to your courses"); ov.reload(); recs.reload(); } }
+    try { const p = await api.post<Plan>(`/path/plan?save=${save}`); setPlan(p); if (save) { toast("Plan saved to your courses"); ov.reload(); recs.reload(); review.reload(); savedPlan.reload(); } }
     catch (e) { toast((e as Error).message, "error"); } finally { setBusy(false); }
   };
   const setStatus = async (course_id: string, status: string) => {
@@ -116,14 +125,30 @@ export default function PathHome() {
           <Stat label="Core requirements" value={`${p.core.done} / ${p.core.total}`} hint={`${p.core.planned} planned`} tone="flame" />
           <Stat label="Career readiness" value={o.readiness.goal ? `${Math.round(o.readiness.now)}% → ${Math.round(o.readiness.with_plan)}%` : "—"} hint={o.readiness.goal ?? "Set a goal"} tone="navy" />
         </div>)}
-      <Tabs value={tab} onChange={setTab} tabs={[{ id: "plan", label: "Semester plan" }, { id: "progress", label: "Degree progress" }, { id: "recs", label: "Recommended next" }, { id: "setup", label: "Profile & goal" }]} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ id: "plan", label: "Semester plan" }, { id: "progress", label: "Degree progress" }, { id: "recs", label: "Recommended next" }, { id: "whatif", label: "What-if" }, { id: "setup", label: "Profile & goal" }]} />
+
+      {p.program && <ReviewBanner r={review.data ?? null} hasPlan={p.sch.planned > 0} note={note} setNote={setNote} onSubmit={submitReview}
+        onPdf={() => download("/path/plan.pdf", "CometPath-plan.pdf")} />}
+
+      {tab === "whatif" && <WhatIf goals={prof.data.career_goals} onSwitch={() => { reloadAll(); setPlan(null); setTab("plan"); }} />}
 
       {tab === "setup" && <Setup profile={prof.data} goals={prof.data.career_goals} onSaved={() => { reloadAll(); setPlan(null); setTab("plan"); }} />}
 
       {tab === "plan" && (!p.program ? <Empty icon={<GraduationCap className="h-8 w-8" />} title="Choose your program first" /> : (
         <div className="grid gap-5 lg:grid-cols-[1fr_380px]">
           <div className="space-y-4">
-            {!plan ? (
+            {!plan && !!savedPlan.data?.length ? (
+              <Card title={<span>Your saved plan · graduate <b className="text-comet-700">{savedPlan.data[savedPlan.data.length - 1].term}</b></span>}
+                actions={<button className="btn-ghost btn-sm" onClick={() => generate(false)} disabled={busy}><Wand2 className="h-4 w-4" />Regenerate</button>}>
+                <ol className="relative space-y-5 border-l-2 border-comet-100 pl-6">{savedPlan.data.map((t) => (
+                  <li key={t.term}><span className="absolute -left-[9px] mt-1 h-4 w-4 rounded-full border-2 border-white bg-comet-600" />
+                    <div className="mb-2 flex items-baseline gap-2"><span className="font-bold text-comet-900">{t.term}</span><span className="text-xs text-slate-500">{t.credits} SCH</span></div>
+                    <div className="grid gap-2 md:grid-cols-2">{t.courses.map((c) => (
+                      <button key={c.id} onClick={() => setCourse(c.id)} className="rounded-lg border border-slate-200 bg-white p-3 text-left text-sm hover:border-comet-400">
+                        <span className="font-semibold text-comet-800">{c.code}</span> <span className="text-slate-700">{c.title}</span></button>))}</div>
+                  </li>))}</ol>
+              </Card>
+            ) : !plan ? (
               <Empty icon={<Compass className="h-8 w-8" />} title="Build a semester-by-semester plan">CometPath picks courses that satisfy your requirements and prerequisites, preferring the ones that build skills employers want for {prof.data.career_goal ?? "your goal"}.
                 <div className="mt-4"><button className="btn-accent" onClick={() => generate(false)} disabled={busy}><Wand2 className="h-4 w-4" />{busy ? "Planning…" : "Generate my plan"}</button></div></Empty>
             ) : (<>
@@ -207,6 +232,27 @@ export default function PathHome() {
           </Card>
         </div>)}
       <CourseModal id={course} onClose={() => setCourse(null)} />
+    </div>
+  );
+}
+
+function ReviewBanner({ r, hasPlan, note, setNote, onSubmit, onPdf }: { r: Review | null; hasPlan: boolean; note: string; setNote: (v: string) => void; onSubmit: () => void; onPdf: () => void }) {
+  const tone = !r ? "border-slate-200 bg-white" : r.status === "approved" && !r.changed_since ? "border-green-200 bg-green-50" : r.status === "changes_requested" ? "border-amber-200 bg-amber-50" : "border-sky-200 bg-sky-50";
+  const canSubmit = hasPlan && (!r || r.status !== "submitted");
+  return (
+    <div className={`flex flex-wrap items-start gap-3 rounded-xl border p-4 text-sm ${tone}`}>
+      <ClipboardCheck className="mt-0.5 h-5 w-5 shrink-0 text-comet-700" />
+      <div className="min-w-0 flex-1">
+        {!r && <div><b>Advisor review:</b> {hasPlan ? "save-and-submit your plan so your advisor can approve it." : "save a semester plan, then submit it to your advisor."}</div>}
+        {r?.status === "submitted" && <div><b>Waiting for your advisor</b> to review the plan you submitted.</div>}
+        {r?.status === "approved" && <div><b className="text-green-800">Approved by {r.advisor}</b>{r.changed_since && <span className="text-amber-800"> — you changed the plan since, so re-submit it.</span>}</div>}
+        {r?.status === "changes_requested" && <div><b className="text-amber-800">{r.advisor} requested changes.</b> Update your plan and re-submit.</div>}
+        {r?.advisor_note && <div className="mt-1 italic text-slate-700">“{r.advisor_note}”</div>}
+        {canSubmit && (r?.status !== "approved" || r.changed_since) && (
+          <div className="mt-2 flex flex-wrap gap-2"><input className="input max-w-md py-1.5" placeholder="Note to your advisor (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+            <button className="btn-primary btn-sm" onClick={onSubmit}><Send className="h-4 w-4" />Submit for review</button></div>)}
+      </div>
+      <button className="btn-ghost btn-sm" onClick={onPdf}><Download className="h-4 w-4" />Plan PDF</button>
     </div>
   );
 }

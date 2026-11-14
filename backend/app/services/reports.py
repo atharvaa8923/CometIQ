@@ -172,3 +172,50 @@ def forge_pdf(draft) -> bytes:
         el += [Paragraph(f"<b>{a['standard']}</b>: {', '.join(a['outcomes'])}", ss["BodyText"]) for a in c["accreditation"]]
     doc.build(el)
     return buf.getvalue()
+
+
+# ── CometPath degree plan PDF ──────────────────────────────────────────────────
+def plan_pdf(d: dict) -> bytes:
+    """d: student, program, concentration, career_goal, progress, completed, terms, readiness, review."""
+    ss, buf = _styles(), io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=letter, leftMargin=0.7 * inch, rightMargin=0.7 * inch, topMargin=0.6 * inch,
+                            title=f"Degree plan — {d['student']}")
+    p = d["progress"]
+    el = [Paragraph("COMET<font color='#e87500'>IQ</font> · Degree &amp; Career Plan", ss["H"]),
+          Paragraph(f"<b>{d['student']}</b> · {d['program'] or 'Program not set'}{' · ' + d['concentration'] if d['concentration'] else ''}", ss["BodyText"]),
+          Paragraph(f"Career goal: <b>{d['career_goal'] or 'not set'}</b> · Generated {d['generated']}", ss["Small"]), Spacer(1, 6)]
+    rv = d.get("review")
+    if rv:
+        color = {"approved": "#17684a", "changes_requested": "#c45f00", "submitted": "#1f4e79"}.get(rv["status"], "#334155")
+        label = {"approved": "APPROVED by advisor", "changes_requested": "CHANGES REQUESTED by advisor", "submitted": "SUBMITTED — awaiting advisor review"}[rv["status"]]
+        el.append(Paragraph(f"<font color='{color}'><b>{label}</b></font>"
+                            + (f" — {rv['advisor']} ({rv['reviewed_at']})" if rv.get("advisor") else "")
+                            + (f"<br/><i>{rv['advisor_note']}</i>" if rv.get("advisor_note") else "")
+                            + (" <font color='#c45f00'>· Plan changed since approval</font>" if rv.get("changed_since") else ""), ss["BodyText"]))
+    el.append(Paragraph("Progress", ss["H2c"]))
+    el.append(Paragraph(f"Completed {p['sch']['completed']} of {p['total_sch']} SCH · enrolled {p['sch']['enrolled']} · planned {p['sch']['planned']} · "
+                        f"core requirements {p['core']['done']}/{p['core']['total']} done", ss["BodyText"]))
+    if d["completed"]:
+        el.append(Paragraph("Completed / in progress: " + ", ".join(f"{c['code']} ({c['status']}{', ' + c['grade'] if c.get('grade') else ''})" for c in d["completed"]), ss["Small"]))
+    el.append(Paragraph("Semester plan", ss["H2c"]))
+    if not d["terms"]:
+        el.append(Paragraph("No saved plan yet.", ss["BodyText"]))
+    for t in d["terms"]:
+        data = [[Paragraph(f"<b>{t['term']}</b> · {t['credits']} SCH", ss["Small"]), "", ""]]
+        data += [[c["code"], Paragraph(c["title"], ss["Small"]), f"{c['credits']} SCH"] for c in t["courses"]]
+        tb = Table(data, colWidths=[1.0 * inch, 4.9 * inch, 0.8 * inch])
+        tb.setStyle(TableStyle([("SPAN", (0, 0), (-1, 0)), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#ecf7f2")),
+                                ("FONTSIZE", (0, 0), (-1, -1), 8.5), ("LINEBELOW", (0, 0), (-1, -1), 0.25, colors.HexColor("#cbd5e1")),
+                                ("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
+        el += [tb, Spacer(1, 6)]
+    r = d.get("readiness") or {}
+    if r.get("goal"):
+        el.append(Paragraph(f"Career readiness — {r['goal']}", ss["H2c"]))
+        el.append(Paragraph(f"Today {round(r['now'])}% → with this plan {round(r['with_plan'])}% of the top in-demand skills "
+                            f"(from {r['job_count']} current postings).", ss["BodyText"]))
+        gaps = [s["skill"] for s in r["skills"] if s["status"] == "gap"]
+        if gaps:
+            el.append(Paragraph("Remaining skill gaps: " + ", ".join(gaps), ss["Small"]))
+    el += [Spacer(1, 10), Paragraph("This plan is advisory. Confirm requirements with your academic advisor and the official catalog.", ss["Small"])]
+    doc.build(el)
+    return buf.getvalue()

@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     AI_MODEL: str = "claude-opus-5-5"
 
+    # UTD Nebula Labs API (live sections & grade distributions) — https://api.utdnebula.com
+    NEBULA_API_KEY: str = ""
+    NEBULA_BASE_URL: str = "https://api.utdnebula.com"
+
     # Optional live job sources
     ADZUNA_APP_ID: str = ""
     ADZUNA_APP_KEY: str = ""
