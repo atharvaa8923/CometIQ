@@ -139,3 +139,19 @@ def ai_test(user: User = Depends(admin_only)):
     if res is None:
         return {"ok": False, "message": "Claude call failed — check the server log for the API error (key, model access or network)."}
     return {"ok": True, "message": f"Claude responded with {len(res.skills)} skills: {', '.join(res.skills)}"}
+
+
+@router.post("/catalog/import-nebula", status_code=202)
+def import_nebula_catalog(graduate_only: bool = False, user: User = Depends(admin_only), db: Session = Depends(get_db)):
+    """Import every UTD course (titles, descriptions, credits, prerequisites) from Nebula in the background."""
+    from ..models import Task
+    from ..services import tasks as tasksvc
+
+    if not nebula.enabled():
+        raise HTTPException(400, "Set NEBULA_API_KEY first")
+    if db.scalar(select(Task.id).where(Task.kind == "catalog.nebula_import", Task.status.in_(("queued", "running")))):
+        raise HTTPException(409, "An import is already running")
+    t = tasksvc.enqueue(db, "catalog.nebula_import", {"graduate_only": graduate_only}, user.org_id, user.id)
+    audit(db, user, "catalog.import_nebula", graduate_only=graduate_only)
+    db.commit()
+    return {"task_id": t.id, "status": t.status, "result": t.result}

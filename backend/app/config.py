@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     # UTD Nebula Labs API (live sections & grade distributions) — https://api.utdnebula.com
     NEBULA_API_KEY: str = ""
     NEBULA_BASE_URL: str = "https://api.utdnebula.com"
+    # Hosts CometIQ may download official syllabi from (HTTPS only; protects against SSRF)
+    SYLLABUS_HOSTS: str = "utdallas.edu"
 
     # Optional live job sources
     ADZUNA_APP_ID: str = ""

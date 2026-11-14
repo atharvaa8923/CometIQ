@@ -1,7 +1,7 @@
 import { Bot, CheckCircle2, Loader2, Radio, RefreshCw, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Badge, Card, Spinner } from "../../components/ui";
-import { api } from "../../lib/api";
+import { api, waitForTask } from "../../lib/api";
 import { useApi } from "../../lib/hooks";
 import { useToast } from "../../lib/toast";
 
@@ -19,6 +19,16 @@ export default function Integrations() {
   const { data, loading, reload } = useApi<Data>("/admin/integrations");
   const [aiResult, setAiResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
+  const [gradOnly, setGradOnly] = useState(true);
+  const [catalog, setCatalog] = useState<{ busy: boolean; msg: string | null }>({ busy: false, msg: null });
+  const importCatalog = async () => {
+    setCatalog({ busy: true, msg: "Starting…" });
+    try {
+      const t = await api.post<{ task_id: string }>(`/admin/catalog/import-nebula?graduate_only=${gradOnly}`);
+      const r = await waitForTask(t.task_id, (s) => s.progress && setCatalog({ busy: true, msg: s.progress }), 30 * 60 * 1000) as Record<string, number>;
+      setCatalog({ busy: false, msg: `Done: ${r.courses_in_nebula} courses on Nebula · ${r.added} added · ${r.updated} updated · ${r.prerequisite_links} prerequisite links` });
+    } catch (e) { setCatalog({ busy: false, msg: (e as Error).message }); }
+  };
   const running = data?.runs.some((r) => r.status === "running");
   useEffect(() => { if (!running) return; const t = setInterval(reload, 3000); return () => clearInterval(t); }, [running, reload]);
   if (loading && !data) return <Spinner />;
@@ -58,7 +68,17 @@ export default function Integrations() {
           </div>
         </Card>
         <Card title={<span className="flex items-center gap-2"><Radio className="h-4 w-4 text-flame-500" />UTD Nebula (live sections & grades)</span>}>
-          <div className="text-sm">{data.nebula.enabled ? "Configured — course details show live sections and grade distributions." : "Not configured — set NEBULA_API_KEY (request one from UTD Nebula Labs)."}</div>
+          <div className="space-y-3 text-sm">
+            <div>{data.nebula.enabled ? "Configured — course details show live sections, grade distributions and official syllabi." : "Not configured — set NEBULA_API_KEY (request one from UTD Nebula Labs)."}</div>
+            {data.nebula.enabled && (
+              <div className="rounded-lg border border-slate-200 p-3">
+                <div className="font-semibold text-slate-800">Full UTD catalog</div>
+                <p className="text-xs text-slate-500">Adds every UTD course (title, description, credits, prerequisites) next to the curated JSOM programs. Safe to re-run; curated prerequisites are kept.</p>
+                <label className="mt-2 flex items-center gap-2 text-xs"><input type="checkbox" className="accent-comet-600" checked={gradOnly} onChange={(e) => setGradOnly(e.target.checked)} />Graduate courses only</label>
+                <button className="btn-primary btn-sm mt-2" onClick={importCatalog} disabled={catalog.busy}>{catalog.busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Import from Nebula</button>
+                {catalog.msg && <div className="mt-2 text-xs text-slate-600" role="status">{catalog.msg}</div>}
+              </div>)}
+          </div>
         </Card>
       </div>
     </div>

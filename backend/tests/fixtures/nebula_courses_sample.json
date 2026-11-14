@@ -1,0 +1,20 @@
+{
+  "_comment": "Synthetic sample shaped like Nebula /course/all (schema.Course with CollectionRequirement prerequisites).",
+  "status": 200, "message": "success",
+  "data": [
+    {"_id": "c-cs1", "subject_prefix": "CS", "course_number": "5303", "title": "Computer Science I for Graduate Students", "description": "Programming fundamentals.", "credit_hours": "3", "class_level": "Graduate", "catalog_year": "25",
+     "prerequisites": null},
+    {"_id": "c-cs2-old", "subject_prefix": "CS", "course_number": "6375", "title": "Old title", "description": "", "credit_hours": "3", "class_level": "Graduate", "catalog_year": "23"},
+    {"_id": "c-cs2", "subject_prefix": "CS", "course_number": "6375", "title": "Machine Learning", "description": "Supervised and unsupervised learning, neural networks and deep learning with Python.", "credit_hours": "3", "class_level": "Graduate", "catalog_year": "25",
+     "prerequisites": {"type": "collection", "name": "prereqs", "required": 2, "options": [
+        {"type": "course", "class_reference": "c-cs1", "minimum_grade": "B-"},
+        {"type": "collection", "name": "stats", "required": 1, "options": [
+            {"type": "course", "class_reference": "c-stat"}, {"type": "course", "class_reference": "c-opre"}]},
+        {"type": "major", "major": "Computer Science"}]}},
+    {"_id": "c-stat", "subject_prefix": "STAT", "course_number": "5351", "title": "Probability and Statistics I", "description": "Probability and statistical inference.", "credit_hours": "3", "class_level": "Graduate", "catalog_year": "25"},
+    {"_id": "c-opre", "subject_prefix": "OPRE", "course_number": "6301", "title": "Quantitative Introduction to Risk and Uncertainty in Business", "description": "", "credit_hours": "3", "class_level": "Graduate", "catalog_year": "25"},
+    {"_id": "c-buan", "subject_prefix": "BUAN", "course_number": "6341", "title": "Applied Machine Learning", "description": "", "credit_hours": "3", "class_level": "Graduate", "catalog_year": "25",
+     "prerequisites": {"type": "course", "class_reference": "c-cs1"}},
+    {"_id": "c-ug", "subject_prefix": "CS", "course_number": "1336", "title": "Programming Fundamentals", "description": "Intro programming.", "credit_hours": "3", "class_level": "Undergraduate", "catalog_year": "25"}
+  ]
+}

@@ -1,4 +1,7 @@
+import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { api, waitForTask } from "../../lib/api";
+import { useToast } from "../../lib/toast";
 import { Badge, Card, Empty, Spinner } from "../../components/ui";
 import { useApi } from "../../lib/hooks";
 import { HEAT } from "../../lib/viz";
@@ -17,7 +20,19 @@ export default function ProgramHeatmap() {
   useEffect(() => {
     if (!pid && programs.data?.length) setPid(programs.data.find((p) => p.name.includes("Business Analytics and Artificial"))?.id ?? programs.data[0].id);
   }, [programs.data, pid]);
-  const { data, loading } = useApi<Heat>(pid ? `/gap/programs/${pid}?target=${encodeURIComponent(target)}` : null);
+  const { data, loading, reload } = useApi<Heat>(pid ? `/gap/programs/${pid}?target=${encodeURIComponent(target)}` : null);
+  const meta = useApi<{ nebula_enabled: boolean }>("/meta");
+  const toast = useToast();
+  const [importing, setImporting] = useState<string | null>(null);
+  const importAll = async () => {
+    setImporting("Finding official syllabi…");
+    try {
+      const r = await api.post<{ queued: { course: string; task_id: string }[]; no_syllabus: string[] }>("/gap/import-program-syllabi", { program_id: pid, target });
+      let done = 0;
+      await Promise.all(r.queued.map((q) => waitForTask(q.task_id).catch(() => null).then(() => setImporting(`Analyzed ${++done} of ${r.queued.length} syllabi…`))));
+      toast(`Analyzed ${r.queued.length} official syllabi${r.no_syllabus.length ? ` · none found for ${r.no_syllabus.join(", ")}` : ""}`); reload();
+    } catch (e) { toast((e as Error).message, "error"); } finally { setImporting(null); }
+  };
   const label = (v: number) => (v >= 1 ? "taught" : v > 0 ? "touched on" : "not taught");
 
   return (
@@ -25,7 +40,8 @@ export default function ProgramHeatmap() {
       actions={<div className="flex gap-2">
         <select className="input w-80" value={pid} onChange={(e) => setPid(e.target.value)} aria-label="Program">
           {programs.data?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
-        <div className="w-60"><TargetSelect value={target} onChange={setTarget} /></div></div>}>
+        <div className="w-60"><TargetSelect value={target} onChange={setTarget} /></div>
+        {meta.data?.nebula_enabled && <button className="btn-ghost btn-sm whitespace-nowrap" onClick={importAll} disabled={!!importing || !pid}>{importing ? <><Loader2 className="h-4 w-4 animate-spin" />{importing}</> : "Analyze official syllabi"}</button>}</div>}>
       {loading || !data ? <Spinner /> : !data.courses.length ? <Empty title="This program has no listed courses" /> : (
         <>
           <div className="mb-4 flex flex-wrap items-center gap-4 text-sm">

@@ -169,3 +169,69 @@ def program_heatmap(pid: str, target: str = gapsvc.ALL, top_n: int = 20, user: U
     if not p or p.org_id != user.org_id:
         raise HTTPException(404, "Program not found")
     return gapsvc.program_heatmap(db, p, target, max(8, min(top_n, 40)))
+
+
+# ── Official UTD syllabi (via Nebula) ─────────────────────────────────────────
+@router.get("/utd-syllabi")
+def utd_syllabi(course_id: str, user: User = Depends(faculty), db: Session = Depends(get_db)):
+    from ..services import nebula
+
+    c = db.get(Course, course_id)
+    if not c or c.org_id != user.org_id:
+        raise HTTPException(404, "Course not found")
+    live = nebula.course_live(c.subject, c.code.split()[-1])
+    if not live.get("available"):
+        return {"course": c.code, "available": False, "reason": live.get("reason"), "syllabi": []}
+    return {"course": c.code, "available": True, "syllabi": live.get("syllabi", [])}
+
+
+class ImportIn(BaseModel):
+    course_id: str
+    url: str
+    term: str | None = None
+    target: str = "auto"
+
+
+@router.post("/import-utd-syllabus", status_code=202)
+def import_utd_syllabus(body: ImportIn, user: User = Depends(faculty), db: Session = Depends(get_db)):
+    from ..services import syllabi
+
+    c = db.get(Course, body.course_id)
+    if not c or c.org_id != user.org_id:
+        raise HTTPException(404, "Course not found")
+    if not syllabi.allowed_url(body.url):
+        raise HTTPException(400, "Only official UTD syllabus links (HTTPS on utdallas.edu) can be imported")
+    t = tasks.enqueue(db, "gap.import_syllabus", body.model_dump(), user.org_id, user.id)
+    audit(db, user, "gap.import_utd_syllabus", course=c.code)
+    db.commit()
+    return {"task_id": t.id, "status": t.status, **(t.result or {})}
+
+
+class ProgramImportIn(BaseModel):
+    program_id: str
+    target: str = "auto"
+
+
+@router.post("/import-program-syllabi", status_code=202)
+def import_program_syllabi(body: ProgramImportIn, user: User = Depends(faculty), db: Session = Depends(get_db)):
+    """Queue the latest official syllabus of every core course in a program."""
+    from ..services import nebula
+
+    p = db.get(Program, body.program_id)
+    if not p or p.org_id != user.org_id:
+        raise HTTPException(404, "Program not found")
+    if not nebula.enabled():
+        raise HTTPException(400, "Nebula is not configured (NEBULA_API_KEY)")
+    queued, missing = [], []
+    for pc in p.core:
+        c = pc.course
+        links = nebula.course_live(c.subject, c.code.split()[-1]).get("syllabi") or []
+        if not links:
+            missing.append(c.code)
+            continue
+        t = tasks.enqueue(db, "gap.import_syllabus", {"course_id": c.id, "url": links[0]["url"], "term": links[0]["term"],
+                                                      "target": body.target}, user.org_id, user.id)
+        queued.append({"course": c.code, "task_id": t.id, "term": links[0]["term"]})
+    audit(db, user, "gap.import_program_syllabi", program=p.name, queued=len(queued))
+    db.commit()
+    return {"queued": queued, "no_syllabus": missing}

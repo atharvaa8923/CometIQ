@@ -11,12 +11,13 @@ from .data.sample_jobs import sample_jobs
 from .data.taxonomy import SKILLS
 from .db import Base, SessionLocal, engine
 from .models import (
-    Concentration, ConcentrationCourse, Course, CoursePrereq, CourseSkill, Organization, Program,
+    Concentration, ConcentrationCourse, Course, CoursePrereq, Organization, Program,
     ProgramCore, Skill, StudentCourse, StudentProfile, User,
 )
 from .security import hash_password
 from .services import jobs as jobsvc
 from .services import skills as sk
+from .services.seed_helpers import map_course_skills
 
 log = logging.getLogger("cometiq.seed")
 DATA = Path(__file__).parent / "data"
@@ -31,17 +32,6 @@ def sync_skills(db: Session) -> None:
         else:
             db.add(Skill(name=name, category=cat, aliases=aliases, is_emerging=emerging))
     db.flush()
-
-
-def map_course_skills(db: Session, course: Course, ids: dict[str, int]) -> None:
-    text = f"{course.title}. {course.title}. {course.description or ''}"  # title weighted x2
-    found = sk.extract_builtin(text)
-    course.skills.clear()
-    db.flush()
-    for name, info in found.items():
-        if name in ids:
-            in_title = name in sk.extract_builtin(course.title)
-            course.skills.append(CourseSkill(skill_id=ids[name], weight=1.0 if in_title or info["mentions"] > 1 else 0.6))
 
 
 def seed_catalog(db: Session, org: Organization) -> None:

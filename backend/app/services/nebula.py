@@ -76,11 +76,18 @@ def summarize(sections: list[dict]) -> dict:
         return {"section": s.get("section_number"), "professors": [_prof_name(p) for p in s.get("professor_details") or [] if _prof_name(p)],
                 "instruction_mode": s.get("instruction_mode"), "meetings": meetings, "syllabus_uri": s.get("syllabus_uri") or None}
 
+    syllabi = []
+    for t in terms:
+        for sec in by_term[t]:
+            if sec.get("syllabus_uri"):
+                syllabi.append({"term": labels[t], "section": sec.get("section_number"), "url": sec["syllabus_uri"],
+                                "professors": [_prof_name(p) for p in sec.get("professor_details") or [] if _prof_name(p)]})
     profs = [{"name": n, **_stats(d)} for n, d in prof_dist.items() if sum(d) >= 10]
     profs.sort(key=lambda x: (-(x["gpa"] or 0), x["name"]))
     return {"terms_offered": [labels[t] for t in terms[:8]], "latest_term": labels[latest] if latest else None,
             "sections": sorted((section_out(s) for s in by_term[latest]), key=lambda x: x["section"] or "") if latest else [],
-            "grades": _stats(overall) if sum(overall) else None, "professors": profs[:10], "section_count": len(sections)}
+            "grades": _stats(overall) if sum(overall) else None, "professors": profs[:10], "section_count": len(sections),
+            "syllabi": syllabi[:20]}
 
 
 def course_live(subject: str, number: str) -> dict:
@@ -109,3 +116,76 @@ def course_live(subject: str, number: str) -> dict:
         out = {"configured": True, "available": False, "reason": f"Nebula is unavailable right now ({type(e).__name__})."}
         _cache[key] = (time.time() + ERROR_TTL, out)
         return out
+
+
+# ── Full catalog import ────────────────────────────────────────────────────────
+def _get(path: str, params: dict | None = None) -> dict:
+    s = get_settings()
+    r = httpx.get(f"{s.NEBULA_BASE_URL.rstrip('/')}{path}", params=params or {}, timeout=120,
+                  headers={"x-api-key": s.NEBULA_API_KEY, "Accept": "application/json"})
+    r.raise_for_status()
+    return r.json()
+
+
+def fetch_all_courses(progress=None) -> list[dict]:
+    """All UTD courses. Uses /course/all; falls back to paginated /course?offset=N."""
+    try:
+        data = _get("/course/all").get("data") or []
+        if data:
+            return data
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code not in (404, 405):
+            raise
+    out, offset = [], 0
+    while True:
+        page = _get("/course", {"offset": offset}).get("data") or []
+        if not page:
+            return out
+        out += page
+        offset += len(page)
+        if progress and offset % 500 < len(page):
+            progress(f"Downloaded {offset} courses…")
+        if offset > 50000:  # safety stop
+            return out
+
+
+def latest_by_code(courses: list[dict]) -> dict[str, dict]:
+    """Nebula has one record per catalog year; keep the newest per course code."""
+    best: dict[str, dict] = {}
+    for c in courses:
+        prefix, num = (c.get("subject_prefix") or "").upper().strip(), (c.get("course_number") or "").strip()
+        if not prefix or not num:
+            continue
+        code = f"{prefix} {num}"
+        if code not in best or (c.get("catalog_year") or "") > (best[code].get("catalog_year") or ""):
+            best[code] = c
+    return best
+
+
+def prereq_groups(req: dict | None, code_of: dict[str, str]) -> list[list[str]]:
+    """Nebula CollectionRequirement → AND of OR-groups of course codes (CometIQ's prerequisite model).
+    Non-course requirements (major, GPA, consent…) are skipped. 'k of n' collections become one OR group."""
+    if not req:
+        return []
+    t = req.get("type")
+    if t == "course":
+        code = code_of.get(str(req.get("class_reference")))
+        return [[code]] if code else []
+    if t != "collection":
+        return []
+    children = [prereq_groups(o, code_of) for o in req.get("options") or [] if isinstance(o, dict)]
+    children = [c for c in children if c]
+    if not children:
+        return []
+    required = req.get("required") or 1
+    if required >= len(req.get("options") or []):  # all of them: AND
+        return [g for c in children for g in c]
+    group = sorted({code for c in children for g in c for code in g})  # any/some of them: OR (conservative)
+    return [group] if group else []
+
+
+def credits(value) -> int:
+    try:
+        return max(0, min(int(float(str(value).strip() or 3)), 12))
+    except ValueError:
+        return 3
