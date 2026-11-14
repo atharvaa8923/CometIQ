@@ -6,7 +6,7 @@ import { useAuth } from "../lib/auth";
 
 const DEMO = [
   ["Faculty", "faculty@cometiq.app"], ["Student", "student@cometiq.app"],
-  ["Employer", "employer@cometiq.app"], ["Admin", "admin@cometiq.app"],
+  ["Employer", "employer@cometiq.app"], ["Advisor", "advisor@cometiq.app"], ["Admin", "admin@cometiq.app"],
 ];
 
 export function AuthShell({ children, title }: { children: React.ReactNode; title: string }) {
@@ -59,7 +59,7 @@ export default function Login() {
       <p className="mt-4 text-center text-sm text-slate-500">New here? <Link to="/register" className="font-semibold text-flame-600">Create an account</Link></p>
       <div className="mt-8 rounded-lg border border-slate-200 bg-slate-50 p-4">
         <div className="label">One-click demo accounts</div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           {DEMO.map(([r, e]) => (
             <button key={e} type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => submit(undefined, [e, "CometIQ2026!"])}>{r}</button>
           ))}

@@ -1,4 +1,4 @@
-import { BookOpen, BriefcaseBusiness, LayoutDashboard, Library, Route, ScanSearch, Settings, Users } from "lucide-react";
+import { BookOpen, BriefcaseBusiness, ClipboardCheck, LayoutDashboard, Library, Route, ScanSearch, Settings, ShieldCheck, Users } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Role } from "./auth";
 
@@ -12,11 +12,13 @@ export const MODULES: NavItem[] = [
 ];
 
 export const NAV: NavItem[] = [
-  { to: "/app", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" />, roles: ["admin", "faculty", "student", "employer"] },
+  { to: "/app", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" />, roles: ["admin", "faculty", "student", "employer", "advisor"] },
   ...MODULES,
-  { to: "/catalog", label: "Knowledge Graph", icon: <Library className="h-4 w-4" />, roles: ["admin", "faculty", "student"] },
+  { to: "/advising", label: "Advising", icon: <ClipboardCheck className="h-4 w-4" />, roles: ["advisor", "admin"] },
+  { to: "/verify", label: "Verifications", icon: <ShieldCheck className="h-4 w-4" />, roles: ["advisor", "admin"] },
+  { to: "/catalog", label: "Knowledge Graph", icon: <Library className="h-4 w-4" />, roles: ["admin", "faculty", "student", "advisor"] },
   { to: "/admin/users", label: "Users", icon: <Users className="h-4 w-4" />, roles: ["admin"] },
   { to: "/admin/org", label: "Organization", icon: <Settings className="h-4 w-4" />, roles: ["admin"] },
 ];
 
-export const ROLE_LABEL: Record<Role, string> = { admin: "Administrator", faculty: "Faculty", student: "Student", employer: "Employer" };
+export const ROLE_LABEL: Record<Role, string> = { admin: "Administrator", faculty: "Faculty", student: "Student", employer: "Employer", advisor: "Academic advisor" };

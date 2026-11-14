@@ -6,13 +6,13 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint,
+    JSON, Boolean, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
 
-ROLES = ("admin", "faculty", "student", "employer")
+ROLES = ("admin", "faculty", "student", "employer", "advisor")
 
 
 def _id() -> str:
@@ -283,6 +283,62 @@ class Application(Base):
 
     job: Mapped[Job] = relationship()
     student: Mapped[User] = relationship()
+
+
+class Evidence(Base):
+    """Student-submitted proof of a skill: a course, certification, project or experience.
+    Verified evidence counts as full skill evidence in CometMatch; verified certifications add bonus points."""
+    __tablename__ = "evidence"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    student_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(20))  # course | certification | project | experience
+    title: Mapped[str] = mapped_column(String(300))
+    issuer: Mapped[str | None] = mapped_column(String(200))
+    course_id: Mapped[str | None] = mapped_column(ForeignKey("courses.id", ondelete="SET NULL"))
+    description: Mapped[str] = mapped_column(Text, default="")
+    skills: Mapped[list] = mapped_column(JSON, default=list)  # skill ids
+    credential_id: Mapped[str | None] = mapped_column(String(200))
+    credential_url: Mapped[str | None] = mapped_column(String(1000))
+    issued_on: Mapped[str | None] = mapped_column(String(20))
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)  # pending | verified | rejected
+    bonus_points: Mapped[int] = mapped_column(Integer, default=0)
+    reviewer_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    review_note: Mapped[str | None] = mapped_column(Text)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    student: Mapped[User] = relationship(foreign_keys=[student_id])
+    course: Mapped[Course | None] = relationship()
+    file: Mapped["EvidenceFile | None"] = relationship(cascade="all, delete-orphan", uselist=False)
+
+
+class EvidenceFile(Base):
+    """Uploaded certificate/transcript. Stored in the database so deployments need no persistent disk."""
+    __tablename__ = "evidence_files"
+    evidence_id: Mapped[str] = mapped_column(ForeignKey("evidence.id", ondelete="CASCADE"), primary_key=True)
+    filename: Mapped[str] = mapped_column(String(300))
+    content_type: Mapped[str] = mapped_column(String(100))
+    size: Mapped[int] = mapped_column(Integer)
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+
+
+class PlanReview(Base):
+    """A degree plan submitted by a student for advisor review."""
+    __tablename__ = "plan_reviews"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    student_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    advisor_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    status: Mapped[str] = mapped_column(String(30), default="submitted", index=True)  # submitted | approved | changes_requested
+    snapshot: Mapped[dict] = mapped_column(JSON)  # program, concentration, goal, terms, readiness at submission
+    student_note: Mapped[str | None] = mapped_column(Text)
+    advisor_note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    student: Mapped[User] = relationship(foreign_keys=[student_id])
+    advisor: Mapped[User | None] = relationship(foreign_keys=[advisor_id])
 
 
 class AuditLog(Base):

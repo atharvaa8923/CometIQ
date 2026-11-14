@@ -45,7 +45,7 @@ export default function Register() {
           <>
             <Field label="I am a">
               <select className="input" value={f.role} onChange={set("role")}>
-                <option value="student">Student</option><option value="faculty">Faculty member</option><option value="employer">Employer / recruiter</option>
+                <option value="student">Student</option><option value="faculty">Faculty member</option><option value="advisor">Academic advisor</option><option value="employer">Employer / recruiter</option>
               </select>
             </Field>
             {f.role === "employer" && <Field label="Company"><input className="input" required value={f.company} onChange={set("company")} /></Field>}

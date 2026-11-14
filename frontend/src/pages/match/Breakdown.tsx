@@ -1,8 +1,10 @@
-import { AlertTriangle, CheckCircle2, CircleDot, GraduationCap } from "lucide-react";
+import { AlertTriangle, Award, CheckCircle2, CircleDot, GraduationCap, Loader2, Sparkles } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
+import { api } from "../../lib/api";
 
 export interface SkillHit { skill: string; category: string; importance: string; level: number; sources: string[]; learn_in?: string[] }
-export interface MatchResult { score: number; label: string; summary: string; matched: SkillHit[]; partial: SkillHit[]; missing: SkillHit[] }
+export interface MatchResult { score: number; base_score?: number; bonus?: number; bonus_items?: { title: string; points: number }[]; label: string; summary: string; matched: SkillHit[]; partial: SkillHit[]; missing: SkillHit[] }
 
 export function FitBadge({ score, label }: { score: number; label: string }) {
   const tone = score >= 70 ? "bg-comet-700 text-white" : score >= 50 ? "bg-comet-100 text-comet-800" : score >= 30 ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600";
@@ -36,7 +38,12 @@ const Row = ({ s, kind, showLearn }: { s: SkillHit; kind: "matched" | "partial" 
 export function Breakdown({ m, showLearn }: { m: MatchResult; showLearn?: boolean }) {
   return (
     <div className="space-y-4">
-      <p className="text-sm text-slate-600">{m.summary}. Score = required skills ×1.0 + preferred ×0.5, weighted by your evidence level (resume or completed course = full; in-progress or secondary course topic = partial).</p>
+      <p className="text-sm text-slate-600">{m.summary}. Score = required skills ×1.0 + preferred ×0.5, weighted by evidence level (resume, completed course or verified certificate = full; in-progress, pending or secondary course topic = partial).</p>
+      {!!m.bonus && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg bg-flame-50 px-3 py-2 text-sm text-flame-900">
+          <Award className="h-4 w-4 text-flame-500" aria-hidden />
+          <span>Base {Math.round(m.base_score ?? 0)}% <b>+ {m.bonus} bonus</b> for verified {m.bonus_items?.map((b) => `${b.title} (+${b.points})`).join(", ")} = <b>{Math.round(m.score)}%</b></span>
+        </div>)}
       <div className="grid gap-4 md:grid-cols-3">
         {([["matched", "You have", m.matched], ["partial", "Partially", m.partial], ["missing", "Missing", m.missing]] as const).map(([k, title, list]) => (
           <div key={k}>
@@ -44,6 +51,26 @@ export function Breakdown({ m, showLearn }: { m: MatchResult; showLearn?: boolea
             {list.length ? <ul className="space-y-2">{list.map((s) => <Row key={s.skill} s={s} kind={k} showLearn={showLearn} />)}</ul> : <div className="text-sm text-slate-400">—</div>}
           </div>))}
       </div>
+    </div>
+  );
+}
+
+interface Explanation { headline: string; strengths: string[]; gaps: string[]; next_steps: string[]; engine: string }
+
+/** "Explain this match" — Claude when configured, otherwise the built-in explainer. */
+export function AiExplain({ path }: { path: string }) {
+  const [x, setX] = useState<Explanation | null>(null);
+  const [busy, setBusy] = useState(false);
+  if (!x) return (
+    <button className="btn-ghost btn-sm" disabled={busy} onClick={async () => { setBusy(true); try { setX(await api.post<Explanation>(path)); } finally { setBusy(false); } }}>
+      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-flame-500" />}Explain this match</button>);
+  const List = ({ title, items }: { title: string; items: string[] }) => (
+    <div><div className="label">{title}</div><ul className="list-disc space-y-1 pl-4 text-sm text-slate-700">{items.map((i) => <li key={i}>{i}</li>)}</ul></div>);
+  return (
+    <div className="rounded-xl border border-flame-200 bg-gradient-to-br from-flame-50 to-white p-4">
+      <div className="mb-3 flex items-start gap-2 text-sm font-semibold text-slate-800"><Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-flame-500" />{x.headline}</div>
+      <div className="grid gap-4 md:grid-cols-3"><List title="Strengths" items={x.strengths} /><List title="Gaps" items={x.gaps} /><List title="Next steps" items={x.next_steps} /></div>
+      <div className="mt-2 text-right text-[11px] text-slate-400">{x.engine === "claude" ? "Written by Claude from the score breakdown" : "CometIQ built-in explainer"}</div>
     </div>
   );
 }

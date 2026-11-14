@@ -1,13 +1,18 @@
-import { BriefcaseBusiness, ExternalLink, FileUp, Send } from "lucide-react";
+import { BriefcaseBusiness, ExternalLink, FileUp, Lightbulb, Loader2, Plus, Send, TrendingUp } from "lucide-react";
+import { Link } from "react-router-dom";
+import EvidencePortal from "./EvidencePortal";
 import { useState } from "react";
 import { Badge, Card, Empty, Modal, PageHeader, Spinner, Tabs } from "../../components/ui";
 import { api } from "../../lib/api";
 import { useApi } from "../../lib/hooks";
 import { useToast } from "../../lib/toast";
-import { Breakdown, FitBadge, type MatchResult } from "./Breakdown";
+import { AiExplain, Breakdown, FitBadge, type MatchResult } from "./Breakdown";
 
 interface JobMatch { id: string; title: string; company: string | null; location: string | null; employment_type: string; role_family: string | null; source: string; url: string | null;
-  score: number; label: string; summary: string; matched: string[]; missing: string[]; can_apply: boolean; application: string | null }
+  score: number; bonus: number; label: string; summary: string; matched: string[]; missing: string[]; can_apply: boolean; application: string | null }
+interface LearnSkill { skill_id: number; skill: string; category: string; jobs: number; points: number; points_per_job: number; current_level: number; examples: string[];
+  courses: { id: string; code: string; title: string; in_program: boolean; status: string | null }[] }
+interface Tips { summary: string; tips: { title: string; detail: string; priority: string }[]; engine: string }
 interface Detail extends MatchResult { job: { id: string; title: string; company: string; location: string; description: string; url: string | null; employment_type: string }; can_apply: boolean; application: { status: string } | null }
 interface Me { headline: string | null; open_to_match: boolean; resume_filename: string | null; resume_preview: string; skills: { id: number; name: string; category: string; level: number; sources: string[] }[] }
 interface AppRow { id: string; status: string; score: number; initiated_by: string; updated_at: string; job: { id: string; title: string; company: string; location: string } }
@@ -16,7 +21,15 @@ const STATUS_COLOR: Record<string, string> = { applied: "blue", shortlisted: "pu
 
 export default function StudentMatch() {
   const toast = useToast();
-  const [tab, setTab] = useState<"jobs" | "profile" | "apps">("jobs");
+  const [tab, setTab] = useState<"jobs" | "evidence" | "learn" | "profile" | "apps">("jobs");
+  const learn = useApi<{ career_goal: string | null; skills: LearnSkill[] }>(tab === "learn" ? "/match/learn-next" : null);
+  const [tips, setTips] = useState<Tips | null>(null);
+  const [tipsBusy, setTipsBusy] = useState(false);
+  const getTips = async () => { setTipsBusy(true); try { setTips(await api.post<Tips>("/match/me/resume-tips")); } finally { setTipsBusy(false); } };
+  const planCourse = async (course_id: string, code: string) => {
+    const r = await api.post<{ warning: string | null }>("/path/courses", { course_id, status: "planned" });
+    toast(r.warning ? `${code} added to your plan. ${r.warning}` : `${code} added to your CometPath plan`, r.warning ? "info" : "success"); learn.reload();
+  };
   const [fam, setFam] = useState("");
   const [postedOnly, setPostedOnly] = useState(false);
   const meta = useApi<{ role_families: string[] }>("/meta");
@@ -48,7 +61,7 @@ export default function StudentMatch() {
       <PageHeader icon={<BriefcaseBusiness className="h-5 w-5" />} accent="navy" title="CometMatch" subtitle="Student–Employer Talent Matching"
         actions={<label className="btn-primary cursor-pointer"><FileUp className="h-4 w-4" />{uploading ? "Analyzing…" : me.data?.resume_filename ? "Update resume" : "Upload resume"}
           <input type="file" accept=".pdf,.docx,.txt" className="hidden" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} /></label>} />
-      <Tabs value={tab} onChange={setTab} tabs={[{ id: "jobs", label: "Best-fit jobs" }, { id: "profile", label: "My skill profile" }, { id: "apps", label: `Applications${apps.data?.length ? ` (${apps.data.length})` : ""}` }]} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ id: "jobs", label: "Best-fit jobs" }, { id: "evidence", label: "Courses & certifications" }, { id: "learn", label: "Skills to learn next" }, { id: "profile", label: "Skill profile & resume tips" }, { id: "apps", label: `Applications${apps.data?.length ? ` (${apps.data.length})` : ""}` }]} />
 
       {tab === "jobs" && (
         <Card padded={false} title={<div className="flex flex-wrap items-center gap-3">
@@ -64,7 +77,7 @@ export default function StudentMatch() {
                     <FitBadge score={j.score} label={j.label} />
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2"><span className="font-semibold text-slate-800">{j.title}</span>
-                        {j.can_apply ? <Badge color="green">Partner employer</Badge> : <Badge>{j.source}</Badge>}{j.application && <Badge color={STATUS_COLOR[j.application]}>{j.application}</Badge>}</div>
+                        {j.can_apply ? <Badge color="green">Partner employer</Badge> : <Badge>{j.source}</Badge>}{j.application && <Badge color={STATUS_COLOR[j.application]}>{j.application}</Badge>}{j.bonus > 0 && <Badge color="orange">+{j.bonus} verified bonus</Badge>}</div>
                       <div className="text-xs text-slate-500">{j.company} · {j.location} · {j.employment_type}</div>
                       <div className="mt-1.5 flex flex-wrap gap-1">
                         {j.matched.map((s) => <Badge key={s} color="green">✓ {s}</Badge>)}
@@ -74,6 +87,30 @@ export default function StudentMatch() {
                   </button>
                 </li>))}
             </ul>)}
+        </Card>)}
+
+      {tab === "evidence" && <EvidencePortal onChange={() => { me.reload(); jobs.reload(); }} />}
+
+      {tab === "learn" && (
+        <Card title={<span className="flex items-center gap-2"><TrendingUp className="h-4 w-4 text-flame-500" />Skills that would raise your fit the most{learn.data?.career_goal ? ` for ${learn.data.career_goal} roles` : ""}</span>}>
+          {learn.loading || !learn.data ? <Spinner /> : !learn.data.skills.length ? <p className="text-sm text-slate-500">You already cover the skills in your best-fit jobs. 🎉</p> : (
+            <ol className="space-y-3">{learn.data.skills.map((g, i) => (
+              <li key={g.skill_id} className="rounded-lg border border-slate-200 p-4">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <div><span className="mr-2 text-sm font-bold text-flame-600">#{i + 1}</span><span className="font-semibold text-slate-800">{g.skill}</span>
+                    <span className="ml-2 text-xs text-slate-500">{g.category}{g.current_level > 0 ? ` · you have ${Math.round(g.current_level * 100)}%` : ""}</span></div>
+                  <div className="text-sm"><b className="text-comet-700">+{g.points_per_job} pts</b> <span className="text-slate-500">avg. per job · needed in {g.jobs} of your top jobs</span></div>
+                </div>
+                <div className="mt-1 text-xs text-slate-500">e.g. {g.examples.join(" · ")}</div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {g.courses.length ? g.courses.map((c) => (
+                    <div key={c.id} className="flex items-center gap-2 rounded-md border border-slate-200 px-2 py-1 text-xs">
+                      <span><b className="text-comet-800">{c.code}</b> {c.title}</span>{c.in_program && <Badge color="green">in your program</Badge>}
+                      {c.status ? <Badge color="blue">{c.status}</Badge> : <button className="inline-flex items-center gap-0.5 font-semibold text-flame-600 hover:underline" onClick={() => planCourse(c.id, c.code)}><Plus className="h-3 w-3" />Add to plan</button>}
+                    </div>)) : <span className="text-xs text-slate-500">No catalog course teaches this yet — try a certification or project, then add it under Courses & certifications.</span>}
+                </div>
+              </li>))}</ol>)}
+          <div className="mt-4 text-right text-sm"><Link to="/path" className="font-semibold text-comet-700 hover:underline">Open my CometPath plan →</Link></div>
         </Card>)}
 
       {tab === "profile" && (
@@ -94,6 +131,17 @@ export default function StudentMatch() {
               <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600">Employers see your name, program, headline and skill evidence — not your full resume text.</div>
               {me.data?.resume_filename && <div className="text-xs text-slate-500">Resume on file: <b>{me.data.resume_filename}</b></div>}
             </div>
+          </Card>
+          <Card title={<span className="flex items-center gap-2"><Lightbulb className="h-4 w-4 text-flame-500" />Resume improvement tips</span>} className="lg:col-span-2">
+            {!tips ? <button className="btn-accent" onClick={getTips} disabled={tipsBusy}>{tipsBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lightbulb className="h-4 w-4" />}Review my resume</button> : (
+              <div className="space-y-3">
+                <p className="text-sm text-slate-600">{tips.summary}</p>
+                <ul className="space-y-2">{tips.tips.map((t) => (
+                  <li key={t.title} className="flex gap-3 rounded-lg border border-slate-200 p-3 text-sm">
+                    <Badge color={t.priority === "high" ? "red" : t.priority === "medium" ? "orange" : "slate"}>{t.priority}</Badge>
+                    <div><div className="font-semibold text-slate-800">{t.title}</div><div className="text-slate-600">{t.detail}</div></div></li>))}</ul>
+                <div className="flex items-center justify-between text-[11px] text-slate-400"><span>{tips.engine === "claude" ? "Reviewed by Claude" : "CometIQ built-in reviewer"}</span><button className="btn-ghost btn-sm" onClick={getTips}>Refresh</button></div>
+              </div>)}
           </Card>
         </div>)}
 
@@ -116,6 +164,7 @@ export default function StudentMatch() {
                 : <button className="btn-accent" onClick={() => apply(detail.data!.job.id)}><Send className="h-4 w-4" />{detail.data.application ? "Accept invitation" : "Apply"}</button>)
                 : detail.data.job.url && <a className="btn-ghost" href={detail.data.job.url} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" />Apply on site</a>}
             </div>
+            <AiExplain key={detail.data.job.id} path={`/match/jobs/${detail.data.job.id}/explain`} />
             <Breakdown m={detail.data} showLearn />
             {detail.data.job.description && <details className="text-sm"><summary className="cursor-pointer font-semibold text-slate-700">Job description</summary><pre className="mt-2 whitespace-pre-wrap font-sans text-slate-600">{detail.data.job.description}</pre></details>}
           </div>)}

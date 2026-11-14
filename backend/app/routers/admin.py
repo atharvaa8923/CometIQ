@@ -28,7 +28,7 @@ def list_users(user: User = Depends(admin_only), db: Session = Depends(get_db)):
 class NewUser(BaseModel):
     full_name: str = Field(min_length=2)
     email: EmailStr
-    role: str = Field(pattern="^(admin|faculty|student|employer)$")
+    role: str = Field(pattern="^(admin|faculty|student|employer|advisor)$")
     password: str = Field(min_length=8)
     company: str | None = None
 
@@ -49,7 +49,7 @@ def create_user(body: NewUser, user: User = Depends(admin_only), db: Session = D
 
 
 class PatchUser(BaseModel):
-    role: str | None = Field(default=None, pattern="^(admin|faculty|student|employer)$")
+    role: str | None = Field(default=None, pattern="^(admin|faculty|student|employer|advisor)$")
     is_active: bool | None = None
 
 

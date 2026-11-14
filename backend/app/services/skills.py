@@ -17,10 +17,12 @@ def _matchers() -> list[tuple[str, list[re.Pattern]]]:
     out = []
     for name, _cat, aliases, _em in SKILLS:
         pats = []
-        # The skill name is itself an alias unless it is a 1–2 letter token (e.g. "R").
-        all_aliases = set(aliases) | ({name.lower()} if len(name) > 2 else set())
+        # The skill name is itself an alias unless it is a 1–2 letter token (e.g. "R") or the skill uses a regex alias.
+        all_aliases = set(aliases) | ({name.lower()} if len(name) > 2 and not any(a.startswith("re:") for a in aliases) else set())
         for a in all_aliases:
-            if a.startswith("="):
+            if a.startswith("re:"):
+                pats.append(re.compile(rf"(?<![\w]){a[3:]}(?![\w])", re.I))
+            elif a.startswith("="):
                 pats.append(re.compile(rf"(?<![\w/+#-]){re.escape(a[1:])}(?![\w+#-])"))
             else:
                 pats.append(re.compile(rf"(?<![\w]){re.escape(a.lower())}(?![\w])", re.I))

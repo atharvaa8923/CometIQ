@@ -2,7 +2,9 @@
 
 Each skill: (name, category, aliases, is_emerging).
 Aliases are matched case-insensitively on word boundaries; an alias prefixed with
-"=" is matched case-sensitively (for short tokens like "R" or "Go").
+"=" is matched case-sensitively (for short tokens like "R" or "Go"), and one prefixed
+with "re:" is a raw regular expression (for context, e.g. "communication" but not
+"data communications").
 """
 
 CATEGORIES = [
@@ -166,7 +168,7 @@ SKILLS: list[tuple[str, str, list[str], bool]] = [
     ("Healthcare Analytics", "Healthcare", ["healthcare analytics", "health analytics", "clinical data", "population health"], True),
 
     # ── Professional Skills ───────────────────────────────────────────────────
-    ("Communication", "Professional Skills", ["communication", "communication skills", "presentation", "presentations", "public speaking", "written communication"], False),
+    ("Communication", "Professional Skills", [r"re:(?<!data )(?<!network )(?<!wireless )(?<!digital )communication(?!s? (?:network|protocol|system)s?)", "communication skills", "presentation", "presentations", "public speaking", "written communication"], False),
     ("Teamwork & Collaboration", "Professional Skills", ["teamwork", "collaboration", "cross-functional", "team projects", "team project"], False),
     ("Critical Thinking & Problem Solving", "Professional Skills", ["critical thinking", "problem solving", "problem-solving", "analytical thinking"], False),
     ("Stakeholder Management", "Professional Skills", ["stakeholder", "stakeholders", "stakeholder management", "executive communication"], False),

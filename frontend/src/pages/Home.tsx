@@ -9,6 +9,7 @@ const NEXT: Record<string, string> = {
   faculty: "Upload a syllabus in CometGap to see how it compares with live industry demand, then turn the gaps into an updated syllabus with CometForge.",
   student: "Set your career goal in CometPath to get a semester-by-semester plan, then upload your resume in CometMatch to see your best-fit jobs.",
   employer: "Post a job in CometMatch. CometIQ extracts the skills and ranks matching students with a transparent fit breakdown.",
+  advisor: "Review degree plans waiting in Advising, and verify student courses and certifications in Verifications.",
   admin: "Invite faculty, students and employers with your join code, then follow adoption and outcomes on this dashboard.",
 };
 

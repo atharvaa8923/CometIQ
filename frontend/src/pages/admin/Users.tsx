@@ -8,7 +8,7 @@ import { ROLE_LABEL } from "../../lib/modules";
 import { useToast } from "../../lib/toast";
 
 interface Row { id: string; email: string; full_name: string; role: Role; company: string | null; is_active: boolean; created_at: string }
-const ROLE_COLOR: Record<Role, string> = { admin: "purple", faculty: "green", student: "blue", employer: "orange" };
+const ROLE_COLOR: Record<Role, string> = { admin: "purple", faculty: "green", student: "blue", employer: "orange", advisor: "yellow" };
 
 export default function Users() {
   const { user } = useAuth();
