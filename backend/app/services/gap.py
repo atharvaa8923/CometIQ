@@ -356,13 +356,15 @@ def review_summary(result: dict, reviews: dict[int, "object"]) -> dict:
 
 
 def carry_over_reviews(db: Session, ga: GapAnalysis) -> int:
-    """Re-running an analysis keeps faculty judgments for skills that are still in the report."""
+    """Re-running an analysis of the same syllabus version keeps faculty judgments for skills still in the report."""
     from ..models import GapReview
 
     prev = db.scalar(select(GapAnalysis).where(GapAnalysis.syllabus_id == ga.syllabus_id, GapAnalysis.id != ga.id,
                                                GapAnalysis.target == ga.target).order_by(GapAnalysis.created_at.desc()).limit(1))
     if not prev:
         return 0
+    if prev.syllabus_version_id and ga.syllabus_version_id and prev.syllabus_version_id != ga.syllabus_version_id:
+        return 0  # a review judges one syllabus version; a revised syllabus needs a fresh review
     status = {r["skill_id"]: r["status"] for r in ga.result.get("skills", [])}
     n = 0
     for rv in db.scalars(select(GapReview).where(GapReview.analysis_id == prev.id)):

@@ -23,6 +23,9 @@ import Advising from "./pages/Advising";
 import GapHome from "./pages/gap/GapHome";
 import NewSyllabus from "./pages/gap/NewSyllabus";
 import CourseHistory from "./pages/gap/CourseHistory";
+import CurriculumHome from "./pages/curriculum/CurriculumHome";
+import Proposal from "./pages/curriculum/Proposal";
+import BadgeVerify from "./pages/BadgeVerify";
 
 function Guard({ roles, children }: { roles?: Role[]; children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -40,6 +43,7 @@ export default function App() {
       <Route path="/" element={user ? <Navigate to="/app" replace /> : <Landing />} />
       <Route path="/login" element={user ? <Navigate to="/app" replace /> : <Login />} />
       <Route path="/privacy" element={<Privacy />} />
+      <Route path="/badge/:token" element={<BadgeVerify />} />
       <Route path="/terms" element={<Terms />} />
       <Route path="/accessibility" element={<AccessibilityStatement />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -52,6 +56,8 @@ export default function App() {
         <Route path="/gap/new" element={<Guard roles={["faculty"]}><NewSyllabus /></Guard>} />
         <Route path="/gap/analysis/:id" element={<Guard roles={["faculty"]}><Analysis /></Guard>} />
         <Route path="/gap/course/:sid" element={<Guard roles={["faculty"]}><CourseHistory /></Guard>} />
+        <Route path="/curriculum" element={<Guard roles={["faculty"]}><CurriculumHome /></Guard>} />
+        <Route path="/curriculum/proposals/:id" element={<Guard roles={["faculty"]}><Proposal /></Guard>} />
         <Route path="/forge" element={<Guard roles={["faculty"]}><ForgeHome /></Guard>} />
         <Route path="/forge/new" element={<Guard roles={["faculty"]}><ForgeNew /></Guard>} />
         <Route path="/forge/:id" element={<Guard roles={["faculty"]}><ForgeEditor /></Guard>} />

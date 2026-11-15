@@ -313,6 +313,7 @@ def explain_for_employer(jid: str, sid: str, user: User = Depends(employer), db:
 # ── Employer talent search (all students who opted in) ─────────────────────────
 @router.get("/employer/talent")
 def talent_search(skills: str = "", q: str = "", program_id: str = "", goal: str = "", verified_only: bool = False,
+                  faculty_verified: bool = False,
                   limit: int = 50, user: User = Depends(employer), db: Session = Depends(get_db)):
     from ..models import Evidence, Skill
 
@@ -336,7 +337,8 @@ def talent_search(skills: str = "", q: str = "", program_id: str = "", goal: str
             continue
         sk_ = matchsvc.student_skills(db, u.id)
         if want:
-            hits = [{"skill": names[s], "level": round(min(sk_.get(s, {}).get("level", 0), 1), 2),
+            hits = [{"skill": names[s], "faculty_verified": sk_.get(s, {}).get("faculty_verified", False),
+                     "level": round(min(sk_.get(s, {}).get("level", 0), 1), 2) if not faculty_verified or sk_.get(s, {}).get("faculty_verified") else 0.0,
                      "sources": list(dict.fromkeys(sk_.get(s, {}).get("sources", [])))[:3]} for s in want if s in names]
             score = round(100 * sum(h["level"] for h in hits) / max(len(hits), 1), 1)
             if score == 0:
@@ -345,9 +347,14 @@ def talent_search(skills: str = "", q: str = "", program_id: str = "", goal: str
             hits, score = [], float(len(sk_))
         top = sorted(((v["level"], s) for s, v in sk_.items()), reverse=True)[:8]
         top_names = {s.id: s.name for s in db.scalars(select(Skill).where(Skill.id.in_([s for _, s in top])))}
+        fv = [s for s, v in sk_.items() if v.get("faculty_verified")]
+        if faculty_verified and not want and not fv:
+            continue
+        top_names_all = {s.id: s.name for s in db.scalars(select(Skill).where(Skill.id.in_(fv)))} if fv else {}
         out.append({"student": {"id": u.id, "name": u.full_name, "headline": prof.headline, "program": progs.get(prof.program_id),
                                 "career_goal": prof.career_goal},
                     "score": score, "skills": hits, "top_skills": [top_names[s] for _, s in top if s in top_names],
-                    "verified": verified.get(u.id, []), "skill_count": len(sk_)})
+                    "verified": verified.get(u.id, []), "skill_count": len(sk_),
+                    "faculty_verified": sorted(top_names_all[s] for s, v in sk_.items() if v.get("faculty_verified") and s in top_names_all)[:10]})
     out.sort(key=lambda x: -x["score"])
     return {"searched": [names[s] for s in want if s in names], "results": out[: min(limit, 200)]}

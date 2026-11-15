@@ -1,4 +1,4 @@
-import { BadgeCheck, Search, UserPlus, X } from "lucide-react";
+import { Award, BadgeCheck, Search, UserPlus, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Badge, Card, Empty, Modal, Spinner } from "../../components/ui";
 import { api } from "../../lib/api";
@@ -7,7 +7,7 @@ import { useToast } from "../../lib/toast";
 
 interface Result {
   student: { id: string; name: string; headline: string | null; program: string | null; career_goal: string | null };
-  score: number; skill_count: number; top_skills: string[]; verified: string[];
+  score: number; skill_count: number; top_skills: string[]; verified: string[]; faculty_verified: string[];
   skills: { skill: string; level: number; sources: string[] }[];
 }
 
@@ -23,9 +23,10 @@ export default function TalentSearch({ jobs }: { jobs: { id: string; title: stri
   const [program, setProgram] = useState("");
   const [goal, setGoal] = useState("");
   const [verifiedOnly, setVerifiedOnly] = useState(false);
+  const [facultyOnly, setFacultyOnly] = useState(false);
   const [invite, setInvite] = useState<Result | null>(null);
   const [jobId, setJobId] = useState("");
-  const qs = useMemo(() => new URLSearchParams({ skills: picked.map((p) => p.id).join(","), q, program_id: program, goal, verified_only: String(verifiedOnly) }).toString(), [picked, q, program, goal, verifiedOnly]);
+  const qs = useMemo(() => new URLSearchParams({ skills: picked.map((p) => p.id).join(","), q, program_id: program, goal, verified_only: String(verifiedOnly), faculty_verified: String(facultyOnly) }).toString(), [picked, q, program, goal, verifiedOnly, facultyOnly]);
   const { data, loading } = useApi<{ searched: string[]; results: Result[] }>(`/match/employer/talent?${qs}`);
 
   const addSkill = (name: string) => {
@@ -55,6 +56,7 @@ export default function TalentSearch({ jobs }: { jobs: { id: string; title: stri
             <select className="input" value={program} onChange={(e) => setProgram(e.target.value)} aria-label="Program"><option value="">Any program</option>{programs.data?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
             <select className="input" value={goal} onChange={(e) => setGoal(e.target.value)} aria-label="Career goal"><option value="">Any career goal</option>{meta.data?.role_families.map((r) => <option key={r}>{r}</option>)}</select>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-comet-600" checked={verifiedOnly} onChange={(e) => setVerifiedOnly(e.target.checked)} />Has verified certifications</label>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-comet-600" checked={facultyOnly} onChange={(e) => setFacultyOnly(e.target.checked)} />Count only faculty-verified skills</label>
           </div>
         </div>
       </Card>
@@ -71,6 +73,7 @@ export default function TalentSearch({ jobs }: { jobs: { id: string; title: stri
                 {r.skills.length > 0 && <div className="mt-1.5 flex flex-wrap gap-1">{r.skills.map((s) => (
                   <Badge key={s.skill} color={s.level >= 0.95 ? "green" : s.level > 0 ? "yellow" : "red"} title={s.sources.join(", ") || "no evidence"}>{s.level >= 0.95 ? "✓" : s.level > 0 ? "~" : "✗"} {s.skill}</Badge>))}</div>}
                 {!r.skills.length && <div className="mt-1.5 flex flex-wrap gap-1">{r.top_skills.map((s) => <Badge key={s}>{s}</Badge>)}</div>}
+                {r.faculty_verified?.length > 0 && <div className="mt-1.5 flex flex-wrap gap-1">{r.faculty_verified.map((v) => <span key={v} className="chip bg-comet-100 text-comet-800"><Award className="h-3.5 w-3.5" aria-hidden />{v} · faculty-verified</span>)}</div>}
                 {r.verified.length > 0 && <div className="mt-1.5 flex flex-wrap gap-1">{r.verified.map((v) => <span key={v} className="chip bg-green-50 text-green-800"><BadgeCheck className="h-3.5 w-3.5 text-green-600" aria-hidden />{v}</span>)}</div>}
               </div>
               <button className="btn-ghost btn-sm" disabled={!jobs.length} title={jobs.length ? "" : "Post a job first"} onClick={() => { setInvite(r); setJobId(jobs[0]?.id ?? ""); }}><UserPlus className="h-4 w-4" />Invite to apply</button>

@@ -20,7 +20,8 @@ def gap_analyze(db: Session, task: Task) -> dict:
 
     p = task.payload
     return run_analysis(db, p["syllabus_id"], p.get("target", "auto"), p.get("top_n", 30), p.get("extract", False), task,
-                        sample_id=p.get("sample_id"), user_id=task.user_id, change_note=p.get("change_note"))
+                        sample_id=p.get("sample_id"), user_id=task.user_id, change_note=p.get("change_note"),
+                        proposal_id=p.get("proposal_id"))
 
 
 @handler("forge.generate")

@@ -85,7 +85,8 @@ async def upload_syllabus(
 
 
 def run_analysis(db: Session, syllabus_id: str, target: str, top_n: int = 30, extract: bool = False, task=None,
-                 sample_id: str | None = None, user_id: str | None = None, change_note: str | None = None) -> dict:
+                 sample_id: str | None = None, user_id: str | None = None, change_note: str | None = None,
+                 proposal_id: str | None = None) -> dict:
     """Skill extraction (optional) + gap analysis. Runs inside a background task."""
     syl = db.get(Syllabus, syllabus_id)
     if extract:
@@ -105,6 +106,11 @@ def run_analysis(db: Session, syllabus_id: str, target: str, top_n: int = 30, ex
         tasks.set_progress(db, task, "Comparing with current job postings…")
     ga = gapsvc.analyze(db, syl, target, top_n, sample_id=sample_id, user_id=user_id, change_note=change_note,
                         extraction_engine=getattr(syl, "extraction_engine", None) or "builtin")
+    if proposal_id:
+        from ..models import CurriculumProposal
+
+        if (p := db.get(CurriculumProposal, proposal_id)) and p.syllabus_id == syl.id:
+            p.adopted_version_id = ga.syllabus_version_id
     db.commit()
     return {"analysis_id": ga.id, "syllabus_id": syl.id, "score": ga.score}
 
@@ -295,6 +301,10 @@ def save_review(aid: str, skill_id: int, body: ReviewIn, user: User = Depends(fa
         db.add(rv)
     rv.reviewer_id, rv.system_status, rv.faculty_status, rv.decision = user.id, row["status"], body.faculty_status, decision
     rv.rationale, rv.action, rv.action_note, rv.carried_from = rationale or None, body.action, (body.action_note or "").strip() or None, None
+    db.flush()
+    from ..services import badges as badgesvc
+
+    badgesvc.sync(db, user.org_id)  # a "practiced" confirmation can complete badges for students who finished the course
     audit(db, user, "gap.review", course=s.code or s.title, skill=row["name"], system=row["status"], faculty=body.faculty_status,
           decision=decision, follow_up=body.action)
     db.commit()

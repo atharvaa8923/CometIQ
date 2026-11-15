@@ -38,6 +38,12 @@ def student_skills(db: Session, user_id: str) -> dict[int, dict]:
         for sid in e.skills or []:
             out[sid]["level"] = max(out[sid]["level"], lvl)
             out[sid]["sources"].append(f"✓ {e.title}" if e.status == "verified" else f"{e.title} (pending verification)")
+    from .badges import badges_by_skill
+
+    for sid, bs in badges_by_skill(db, user_id).items():
+        out[sid]["level"] = 1.0
+        out[sid]["faculty_verified"] = True
+        out[sid]["sources"].insert(0, "★ Faculty-verified in " + ", ".join(sorted({b.course_code for b in bs})))
     return dict(out)
 
 

@@ -85,6 +85,7 @@ def test_versions_comparison_reproducibility_and_decisions(client, tokens, monke
     a2 = client.get(f"/api/gap/analyses/{a2_id}", headers=h).json()
     assert a2["inputs"]["syllabus"]["version"] == 2 and a2["inputs"]["sample"]["name"] == "Analyst sample"   # same sample kept
     assert _skill(a2, "Python")["status"] == "covered"
+    assert a2["reviews"] == {}   # reviews judged v1; the revised syllabus needs a fresh review
     d_now = next(d for d in client.get(f"/api/gap/syllabi/{sid}/decisions", headers=h).json()["active"] if d["id"] == d_py["id"])
     assert d_now["detected_in_version"] == 2 and d_now["status"] == "drafted"   # flagged, not auto-closed
     assert client.post(f"/api/gap/decisions/{d_py['id']}/status", headers=h, json={"status": "implemented", "note": "Python unit added"}).json()["status"] == "implemented"

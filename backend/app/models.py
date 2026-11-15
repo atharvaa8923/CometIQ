@@ -341,6 +341,105 @@ class GapDecision(Base):
     skill: Mapped[Skill] = relationship()
 
 
+class CurriculumProposal(Base):
+    """A proposed syllabus change reviewed like a pull request: diff against the current version, evidence,
+    line comments, approvals, then adoption as the next syllabus version. The proposed text is frozen per revision."""
+    __tablename__ = "curriculum_proposals"
+    __table_args__ = (UniqueConstraint("org_id", "number"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    number: Mapped[int] = mapped_column(Integer)
+    syllabus_id: Mapped[str] = mapped_column(ForeignKey("syllabi.id", ondelete="CASCADE"), index=True)
+    title: Mapped[str] = mapped_column(String(300))
+    summary: Mapped[str] = mapped_column(Text, default="")
+    author_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    author_name: Mapped[str | None] = mapped_column(String(200))
+    # draft | in_review | changes_requested | approved | adopted | withdrawn
+    status: Mapped[str] = mapped_column(String(30), default="draft", index=True)
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    base_version_id: Mapped[str | None] = mapped_column(ForeignKey("syllabus_versions.id", ondelete="SET NULL", name="fk_proposals_base_version_id"))
+    forge_draft_id: Mapped[str | None] = mapped_column(ForeignKey("forge_drafts.id", ondelete="SET NULL", name="fk_proposals_forge_draft_id"))
+    proposed_text: Mapped[str] = mapped_column(Text, default="")
+    proposed_content: Mapped[dict | None] = mapped_column(JSON)
+    decision_ids: Mapped[list] = mapped_column(JSON, default=list)
+    evidence: Mapped[dict] = mapped_column(JSON, default=dict)
+    effective_term: Mapped[str | None] = mapped_column(String(40))
+    required_approvals: Mapped[int] = mapped_column(Integer, default=2)
+    adopted_version_id: Mapped[str | None] = mapped_column(String(32))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    comments: Mapped[list["ProposalComment"]] = relationship(cascade="all, delete-orphan", order_by="ProposalComment.created_at")
+    reviews: Mapped[list["ProposalReview"]] = relationship(cascade="all, delete-orphan", order_by="ProposalReview.created_at")
+
+
+class ProposalComment(Base):
+    __tablename__ = "proposal_comments"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    proposal_id: Mapped[str] = mapped_column(ForeignKey("curriculum_proposals.id", ondelete="CASCADE"), index=True)
+    author_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    author_name: Mapped[str | None] = mapped_column(String(200))
+    anchor: Mapped[str | None] = mapped_column(String(40))       # e.g. "L12" (current line) or "R30" (proposed line)
+    anchor_text: Mapped[str | None] = mapped_column(Text)        # the line as it was when commented
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    body: Mapped[str] = mapped_column(Text)
+    resolved: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class ProposalReview(Base):
+    __tablename__ = "proposal_reviews"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    proposal_id: Mapped[str] = mapped_column(ForeignKey("curriculum_proposals.id", ondelete="CASCADE"), index=True)
+    reviewer_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    reviewer_name: Mapped[str | None] = mapped_column(String(200))
+    vote: Mapped[str] = mapped_column(String(20))                # approve | request_changes
+    body: Mapped[str | None] = mapped_column(Text)
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class CurriculumMapEntry(Base):
+    """Faculty-set level at which a course addresses a skill within a program (AACSB-style I/P/M curriculum map)."""
+    __tablename__ = "curriculum_map_entries"
+    __table_args__ = (UniqueConstraint("program_id", "course_id", "skill_id"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    program_id: Mapped[str] = mapped_column(ForeignKey("programs.id", ondelete="CASCADE"), index=True)
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id", ondelete="CASCADE"))
+    skill_id: Mapped[int] = mapped_column(ForeignKey("skills.id", ondelete="CASCADE"))
+    level: Mapped[str] = mapped_column(String(2))                # I | P | M | "-" (not addressed)
+    rationale: Mapped[str | None] = mapped_column(Text)
+    set_by_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    set_by_name: Mapped[str | None] = mapped_column(String(200))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+class SkillBadge(Base):
+    """A faculty-verified skill: the course is confirmed by faculty to have students practice (or master) the skill,
+    and the student's completion of that course was verified by an advisor or administrator."""
+    __tablename__ = "skill_badges"
+    __table_args__ = (UniqueConstraint("student_id", "skill_id", "course_id"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    student_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    skill_id: Mapped[int] = mapped_column(ForeignKey("skills.id", ondelete="CASCADE"))
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id", ondelete="CASCADE"))
+    course_code: Mapped[str] = mapped_column(String(30))
+    level: Mapped[str] = mapped_column(String(20), default="practiced")   # practiced | mastered
+    term: Mapped[str | None] = mapped_column(String(40))
+    basis: Mapped[dict] = mapped_column(JSON, default=dict)               # faculty basis + completion verification
+    status: Mapped[str] = mapped_column(String(20), default="active")     # active | revoked
+    revoked_reason: Mapped[str | None] = mapped_column(Text)
+    public: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    public_token: Mapped[str] = mapped_column(String(40), unique=True)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    skill: Mapped[Skill] = relationship()
+    course: Mapped[Course] = relationship()
+
+
 # ── CometForge ─────────────────────────────────────────────────────────────────
 class ForgeDraft(Base):
     __tablename__ = "forge_drafts"

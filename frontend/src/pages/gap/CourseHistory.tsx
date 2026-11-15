@@ -1,6 +1,6 @@
-import { ArrowRight, FileUp, Gavel, GitCompare, History, Sparkles } from "lucide-react";
+import { ArrowRight, FileUp, Gavel, GitCompare, GitPullRequest, History, Sparkles } from "lucide-react";
 import { useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Badge, Card, Empty, ErrorBox, Field, Modal, PageHeader, Spinner, Tabs } from "../../components/ui";
 import { api, waitForTask } from "../../lib/api";
 import { useApi } from "../../lib/hooks";
@@ -346,6 +346,7 @@ function Proposed({ sid }: { sid: string }) {
           {p.drafts.map((d) => <option key={d.id} value={d.id}>Draft v{d.version} · {d.status} · {new Date(d.created_at).toLocaleDateString()}</option>)}
         </select>
         {p.draft && <Link to={`/forge/${p.draft.id}`} className="btn-ghost btn-sm">Open in CometForge</Link>}
+        {p.draft && <OpenProposal sid={sid} draftId={p.draft.id} code={p.syllabus.code} skills={p.skills.map((s) => s.skill)} />}
         {!p.draft && <span className="text-sm text-slate-600">Create one from the Decisions tab.</span>}
       </div>
       <Card title="Each accepted addition: current syllabus vs proposed change" padded={false}>
@@ -395,4 +396,35 @@ function Proposed({ sid }: { sid: string }) {
       </div>
     </div>
   );
+}
+
+function OpenProposal({ sid, draftId, code, skills }: { sid: string; draftId: string; code: string | null; skills: string[] }) {
+  const nav = useNavigate();
+  const [open, setOpen] = useState(false);
+  const [f, setF] = useState({ title: `Add ${skills.join(", ")} to ${code ?? "the course"}`, summary: "", effective_term: "", start_from: "current" });
+  const [err, setErr] = useState<string | null>(null);
+  const create = async () => {
+    setErr(null);
+    try { const p = await api.post<{ id: string }>("/curriculum/proposals", { syllabus_id: sid, draft_id: draftId, ...f }); nav(`/curriculum/proposals/${p.id}`); }
+    catch (e) { setErr((e as Error).message); }
+  };
+  return (<>
+    <button className="btn-accent btn-sm" onClick={() => setOpen(true)}><GitPullRequest className="h-4 w-4" />Open a curriculum proposal</button>
+    <Modal open={open} onClose={() => setOpen(false)} title="Open a curriculum proposal">
+      <div className="space-y-3 text-sm">
+        <p className="text-slate-600">The committee reviews the change as a diff against the current syllabus, comments on lines and approves it. Once approved you can adopt it as the next syllabus version.</p>
+        <Field label="Title"><input className="input" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} /></Field>
+        <Field label="Summary for reviewers"><textarea className="input min-h-[70px]" value={f.summary} onChange={(e) => setF({ ...f, summary: e.target.value })} /></Field>
+        <Field label="Effective term"><input className="input" value={f.effective_term} onChange={(e) => setF({ ...f, effective_term: e.target.value })} placeholder="Fall 2027" /></Field>
+        <fieldset><legend className="label">Start the proposed text from</legend>
+          <label className="flex items-start gap-2"><input type="radio" name="from" checked={f.start_from === "current"} onChange={() => setF({ ...f, start_from: "current" })} />
+            <span>The current syllabus with the draft's new outcomes, modules and assessments added as a marked section <span className="text-slate-500">(recommended: the diff shows only what changes; edit it to fit the syllabus)</span></span></label>
+          <label className="mt-1 flex items-start gap-2"><input type="radio" name="from" checked={f.start_from === "draft"} onChange={() => setF({ ...f, start_from: "draft" })} />
+            <span>The full CometForge draft <span className="text-slate-500">(a rewritten syllabus: most lines will show as changed)</span></span></label>
+        </fieldset>
+        {err && <p role="alert" className="text-red-700">{err}</p>}
+        <button className="btn-primary w-full" disabled={f.title.trim().length < 5} onClick={create}>Create draft proposal</button>
+      </div>
+    </Modal>
+  </>);
 }

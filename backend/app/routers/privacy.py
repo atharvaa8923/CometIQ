@@ -13,7 +13,8 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import (
-    GapDecision, GapReview, JobSample, PasswordReset, SyllabusVersion, Task,
+    CurriculumMapEntry, CurriculumProposal, GapDecision, GapReview, JobSample, PasswordReset, ProposalComment, ProposalReview, SkillBadge,
+    SyllabusVersion, Task,
     Application, AuditLog, Evidence, ForgeDraft, Job, Notification, PlanReview, StudentCourse, StudentProfile, Syllabus, User,
 )
 from ..security import audit, current_user, require_roles, verify_password
@@ -97,6 +98,11 @@ def erase(db: Session, user: User) -> None:
     db.execute(update(GapReview).where(GapReview.reviewer_id == uid).values(reviewer_id=None))
     db.execute(update(GapDecision).where(GapDecision.reviewer_id == uid).values(reviewer_id=None, reviewer_name=None))
     db.execute(update(SyllabusVersion).where(SyllabusVersion.created_by == uid).values(created_by=None))
+    db.execute(delete(SkillBadge).where(SkillBadge.student_id == uid))
+    db.execute(update(CurriculumProposal).where(CurriculumProposal.author_id == uid).values(author_id=None, author_name=None))
+    db.execute(update(ProposalComment).where(ProposalComment.author_id == uid).values(author_id=None, author_name=None))
+    db.execute(update(ProposalReview).where(ProposalReview.reviewer_id == uid).values(reviewer_id=None, reviewer_name=None))
+    db.execute(update(CurriculumMapEntry).where(CurriculumMapEntry.set_by_id == uid).values(set_by_id=None, set_by_name=None))
     db.execute(update(JobSample).where(JobSample.created_by == uid).values(created_by=None))
     db.execute(delete(PasswordReset).where(PasswordReset.user_id == uid))
     # background jobs they started, and queued/sent emails addressed to them (payloads can hold the address)

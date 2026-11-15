@@ -76,6 +76,8 @@ class Settings(BaseSettings):
     LOGIN_RATE_LIMIT: int = 10
     # Pilot: comma-separated roles allowed to register/sign in (e.g. "admin,faculty"). Empty = all roles.
     PILOT_ROLES: str = ""
+    CURRICULUM_APPROVALS: int = 2       # approvals a curriculum proposal needs (author excluded)
+    OUTCOME_MIN_COHORT: int = 10        # smallest student group shown in outcome comparisons
 
     def allowed_roles(self) -> set[str] | None:
         roles = {r.strip() for r in self.PILOT_ROLES.split(",") if r.strip()}
