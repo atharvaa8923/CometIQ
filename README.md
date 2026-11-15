@@ -1,5 +1,7 @@
 # CometIQ — AI Intelligence for Education, Skills & Talent
 
+> 📘 **Full project overview with screenshots, architecture and tools:** [docs/overview/CometIQ-Project-Overview.md](docs/overview/CometIQ-Project-Overview.md)
+
 **From industry demand to student success.** CometIQ is a multi-tenant SaaS platform that connects
 industry needs, university curriculum, student goals and employer opportunities through four modules
 that share one knowledge graph:
