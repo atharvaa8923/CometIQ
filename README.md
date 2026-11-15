@@ -6,7 +6,7 @@ that share one knowledge graph:
 
 | Module | Who | What it does |
 |---|---|---|
-| **CometGap** — Curriculum–Industry Gap Analysis | Faculty, admins | Upload a syllabus (PDF/DOCX/TXT) and get a coverage score against live job postings. Shows priority gaps, emerging technologies, courses that already teach each gap, a program-wide course × skill heatmap, and PDF/Excel reports. |
+| **CometGap** — Curriculum–Industry Gap Analysis | Faculty, admins | Upload a syllabus (PDF/DOCX/TXT) and get a coverage score against live job postings or a **documented, frozen job sample**. For every skill: the **syllabus excerpt**, how many sampled postings request it (required/preferred), and the postings' **sources and date range**. **Faculty review** each finding (practiced / mentioned only / not covered / not relevant), record a **rationale** for corrections and the follow-up, and track what was confirmed, corrected or acted on (*Pilot review*). Shows priority gaps, emerging technologies, courses that already teach each gap, a program-wide course × skill heatmap, and PDF/Excel reports. |
 | **CometForge** — AI Course & Syllabus Generation | Faculty, admins | Turns a gap report into an updated syllabus: weekly modules, Bloom-aligned learning outcomes, rebalanced assessments, an industry project, AACSB/ABET and program-goal mapping, and a projected before/after score. Supports editing, versions, approval and Word/PDF export. |
 | **CometPath** — AI Degree & Career Planner | Students, advisors | Program/concentration progress with core OR-groups. Builds a prerequisite-safe semester-by-semester plan optimized for a career goal, tracks career readiness, recommends what to take next, and suggests a concentration when another fits the goal better. Also: **what-if plans** ("what if I switch to Finance?"), **advisor review and approval**, **PDF plan export**, and **live UTD sections and grade distributions** from Nebula Labs. |
 | **CometMatch** — Student–Employer Talent Matching | Students, employers, advisors | Students upload a resume and see their best-fit jobs. Employers post roles, see ranked candidates and **search all opted-in students** by skill. Every fit score has a transparent breakdown with evidence, an **AI explanation**, and **resume tips**. Students document **courses, certifications and projects with proof**; once an admin or advisor verifies them they count as full evidence, and **verified certifications add bonus points** (default +10). **Skills to learn next** links straight into CometPath. |
@@ -62,6 +62,10 @@ TEST_DATABASE_URL=postgresql+psycopg://user:pass@host/db ../.venv/bin/python -m 
 
 **Deploying for real:** see [DEPLOY.md](DEPLOY.md) (Render blueprint included). Production mode (`SEED_DEMO=false`) creates no demo accounts.
 
+**Faculty pilot:** [PILOT-PLAN.md](PILOT-PLAN.md) (program, syllabi, job sample, review protocol, measures), [PILOT-RUNBOOK.md](PILOT-RUNBOOK.md)
+(separate environment via `render.pilot.yaml`, demo removal, backup/restore and deletion drills), [PILOT-AGREEMENT.md](PILOT-AGREEMENT.md)
+(data ownership and support template). Operations: `python -m app.manage remove-demo-data | restore-check | verify-erasure`.
+
 ## Configuration (`.env`)
 
 | Variable | Purpose |
@@ -73,6 +77,7 @@ TEST_DATABASE_URL=postgresql+psycopg://user:pass@host/db ../.venv/bin/python -m 
 | `ADZUNA_APP_ID` / `ADZUNA_APP_KEY`, `USAJOBS_API_KEY` / `USAJOBS_EMAIL` | Optional live job feeds. Synced nightly (`JOB_SYNC_HOUR_UTC`) and on demand from Organization → Live job market sources. |
 | `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` | Production: the first admin account. |
 | `SEED_DEMO` | Seed the demo institution on first start. |
+| `PILOT_ROLES` | e.g. `admin,faculty`: only these roles can register or sign in (faculty-only pilot). Empty = all roles. |
 
 ### AI engines
 Every AI feature has two engines that return the **same structured output**:
@@ -91,6 +96,10 @@ Every AI feature has two engines that return the **same structured output**:
 ---
 
 ## How the scores work (transparent by design)
+
+- The CometGap score is **mention-based**: it ranks what to review first. Faculty decide whether students actually practice or demonstrate a skill.
+  The **faculty-reviewed coverage** uses faculty classifications where they exist (practiced = 1, mentioned only = 0.5, not covered = 0;
+  not relevant leaves the denominator) and the mention signal elsewhere.
 
 - **CometGap coverage** = Σ demand × status weight / Σ demand over the top-N market skills.
   Demand is the share of target postings asking for the skill (required = 1.0, preferred = 0.5). Status:
@@ -151,7 +160,7 @@ JSON logs, Sentry, readiness checks), full UTD catalog and official-syllabus imp
 [LAUNCH-CHECKLIST.md](LAUNCH-CHECKLIST.md) for the institutional steps before real students use it.
 
 ### What has and hasn't been tested live
-- Tested end to end in a browser and by 62 API tests (SQLite and PostgreSQL): all four modules, roles, evidence verification,
+- Tested end to end in a browser and by 68 API tests (SQLite and PostgreSQL): all four modules, roles, evidence verification,
   advisor reviews, what-if, PDFs, talent search, production seeding.
 - **Claude, Nebula (catalog, sections, grades, syllabus links), Adzuna, USAJobs, Resend/SMTP email and Sentry** are implemented against their documented APIs and tested with fakes/fixtures, but have
   **not yet been called live** (no keys and/or the hosts were unreachable from the build environment). After deploying, use

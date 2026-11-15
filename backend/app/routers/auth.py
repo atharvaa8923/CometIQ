@@ -32,8 +32,14 @@ def _limited(key: tuple[str, str]) -> bool:
 
 @router.get("/public-config")
 def public_config():
-    """Unauthenticated: tells the login page whether demo accounts exist."""
-    return {"demo": get_settings().SEED_DEMO}
+    """Unauthenticated: tells the login/register pages whether demo accounts exist and which roles are open."""
+    allowed = get_settings().allowed_roles()
+    return {"demo": get_settings().SEED_DEMO, "pilot_roles": sorted(allowed) if allowed else None}
+
+
+def _role_allowed(role: str) -> bool:
+    allowed = get_settings().allowed_roles()
+    return not allowed or role in allowed
 
 
 @router.post("/login")
@@ -46,6 +52,8 @@ def login(body: LoginIn, request: Request, db: Session = Depends(get_db)):
         _failures.setdefault(key, []).append(time.time())
         raise HTTPException(401, "Invalid email or password")
     _failures.pop(key, None)
+    if not _role_allowed(user.role):
+        raise HTTPException(403, "This CometIQ pilot is currently open to faculty only")
     if not user.is_active:
         raise HTTPException(403, "Account disabled")
     audit(db, user, "login")
@@ -55,6 +63,8 @@ def login(body: LoginIn, request: Request, db: Session = Depends(get_db)):
 
 @router.post("/register", status_code=201)
 def register(body: RegisterIn, db: Session = Depends(get_db)):
+    if not _role_allowed(body.role if body.join_code else "admin"):
+        raise HTTPException(403, "Registration for this role is closed during the pilot")
     if not body.accept_terms:
         raise HTTPException(400, "Please accept the privacy notice and terms of use")
     email = body.email.lower()

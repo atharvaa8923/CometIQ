@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import AuditLog, Organization, StudentProfile, User
+from ..config import get_settings
 from ..security import audit, hash_password, require_roles
 from .dashboard import org_counts
 
@@ -37,6 +38,9 @@ class NewUser(BaseModel):
 def create_user(body: NewUser, user: User = Depends(admin_only), db: Session = Depends(get_db)):
     if db.scalar(select(User.id).where(func.lower(User.email) == body.email.lower())):
         raise HTTPException(409, "Email already registered")
+    allowed = get_settings().allowed_roles()
+    if allowed and body.role not in allowed:
+        raise HTTPException(400, f"During the pilot only these roles can be created: {', '.join(sorted(allowed))}")
     u = User(org_id=user.org_id, email=body.email.lower(), full_name=body.full_name, role=body.role,
              company=body.company, password_hash=hash_password(body.password))
     db.add(u)

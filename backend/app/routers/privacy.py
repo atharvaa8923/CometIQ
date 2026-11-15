@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import (
+    GapReview, JobSample, PasswordReset, Task,
     Application, AuditLog, Evidence, ForgeDraft, Job, Notification, PlanReview, StudentCourse, StudentProfile, Syllabus, User,
 )
 from ..security import audit, current_user, require_roles, verify_password
@@ -92,6 +93,16 @@ def erase(db: Session, user: User) -> None:
     db.execute(update(Evidence).where(Evidence.reviewer_id == uid).values(reviewer_id=None))
     db.execute(delete(StudentProfile).where(StudentProfile.user_id == uid))
     db.execute(update(AuditLog).where(AuditLog.user_id == uid).values(user_id=None, detail=None))
+    # faculty judgments stay as institutional records of the course, without the reviewer's identity
+    db.execute(update(GapReview).where(GapReview.reviewer_id == uid).values(reviewer_id=None))
+    db.execute(update(JobSample).where(JobSample.created_by == uid).values(created_by=None))
+    db.execute(delete(PasswordReset).where(PasswordReset.user_id == uid))
+    # background jobs they started, and queued/sent emails addressed to them (payloads can hold the address)
+    db.execute(delete(Task).where(Task.user_id == uid))
+    email = user.email.lower()
+    for t in db.scalars(select(Task).where(Task.kind == "email.send")):
+        if email in json.dumps(t.payload or {}).lower():
+            db.delete(t)
     db.add(AuditLog(org_id=user.org_id, user_id=None, action="privacy.account_deleted", detail={"role": user.role}))
     db.delete(user)
 

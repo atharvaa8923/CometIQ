@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    JSON, Boolean, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint,
+    JSON, Boolean, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint, false,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -113,6 +113,10 @@ class Program(Base):
     is_stem: Mapped[bool] = mapped_column(Boolean, default=False)
     catalog_url: Mapped[str | None] = mapped_column(String(500))
     prereq_notes: Mapped[str | None] = mapped_column(Text)
+    catalog_year: Mapped[str | None] = mapped_column(String(20))           # e.g. "2025-26"
+    catalog_confirmed_by: Mapped[str | None] = mapped_column(String(200))  # program owner who confirmed it
+    catalog_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    catalog_note: Mapped[str | None] = mapped_column(Text)
 
     core: Mapped[list["ProgramCore"]] = relationship(cascade="all, delete-orphan", order_by="ProgramCore.sort")
     concentrations: Mapped[list["Concentration"]] = relationship(cascade="all, delete-orphan")
@@ -196,6 +200,10 @@ class Syllabus(Base):
     filename: Mapped[str | None] = mapped_column(String(300))
     raw_text: Mapped[str] = mapped_column(Text, default="")
     topics: Mapped[list] = mapped_column(JSON, default=list)
+    pilot_approved: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    approved_by: Mapped[str | None] = mapped_column(String(200))   # who approved its use (e.g. instructor / chair)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    approval_note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     skills: Mapped[list["SyllabusSkill"]] = relationship(cascade="all, delete-orphan")
@@ -209,8 +217,45 @@ class SyllabusSkill(Base):
     skill_id: Mapped[int] = mapped_column(ForeignKey("skills.id", ondelete="CASCADE"))
     mentions: Mapped[int] = mapped_column(Integer, default=1)
     evidence: Mapped[str | None] = mapped_column(Text)
+    excerpts: Mapped[list | None] = mapped_column(JSON)  # up to 3 syllabus lines where the skill appears
 
     skill: Mapped[Skill] = relationship()
+
+
+class JobSample(Base):
+    """A documented, frozen set of job postings used as the market evidence for gap analyses."""
+    __tablename__ = "job_samples"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    method: Mapped[str] = mapped_column(Text, default="")        # how/why these postings were selected
+    criteria: Mapped[dict] = mapped_column(JSON, default=dict)    # role family, sources, date range, location, query
+    job_ids: Mapped[list] = mapped_column(JSON, default=list)     # frozen at creation
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class GapReview(Base):
+    """Faculty judgment on one skill of one analysis. The system only sees mentions; faculty decide
+    whether students actually practice or demonstrate the skill."""
+    __tablename__ = "gap_reviews"
+    __table_args__ = (UniqueConstraint("analysis_id", "skill_id"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    analysis_id: Mapped[str] = mapped_column(ForeignKey("gap_analyses.id", ondelete="CASCADE"), index=True)
+    skill_id: Mapped[int] = mapped_column(ForeignKey("skills.id", ondelete="CASCADE"))
+    reviewer_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    system_status: Mapped[str] = mapped_column(String(20))   # covered | partial | missing (mention-based)
+    faculty_status: Mapped[str] = mapped_column(String(20))  # practiced | mentioned_only | not_covered | not_relevant
+    decision: Mapped[str] = mapped_column(String(20))        # confirmed | corrected
+    rationale: Mapped[str | None] = mapped_column(Text)
+    action: Mapped[str] = mapped_column(String(20), default="none")  # none | planned | done
+    action_note: Mapped[str | None] = mapped_column(Text)
+    carried_from: Mapped[str | None] = mapped_column(String(32))     # analysis id the review was copied from
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+    skill: Mapped[Skill] = relationship()
+    reviewer: Mapped[User | None] = relationship()
 
 
 class GapAnalysis(Base):
@@ -218,6 +263,7 @@ class GapAnalysis(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
     syllabus_id: Mapped[str] = mapped_column(ForeignKey("syllabi.id", ondelete="CASCADE"), index=True)
     target: Mapped[str] = mapped_column(String(120))  # role family or "All roles"
+    sample_id: Mapped[str | None] = mapped_column(ForeignKey("job_samples.id", ondelete="SET NULL", name="fk_gap_analyses_sample_id"))
     score: Mapped[float] = mapped_column(Float)
     job_count: Mapped[int] = mapped_column(Integer, default=0)
     result: Mapped[dict] = mapped_column(JSON)

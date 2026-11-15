@@ -147,7 +147,7 @@ def test_login_rate_limit_and_headers(client):
     authmod._failures.clear()
     r = client.get("/api/health")
     assert r.headers["X-Frame-Options"] == "DENY" and r.headers["X-Content-Type-Options"] == "nosniff"
-    assert client.get("/api/auth/public-config").json() == {"demo": True}
+    assert client.get("/api/auth/public-config").json() == {"demo": True, "pilot_roles": None}
 
 
 def test_production_seed_has_no_demo_users(tmp_path, monkeypatch):

@@ -5,6 +5,7 @@ import { Card, ErrorBox, Field, PageHeader } from "../../components/ui";
 import { api, waitForTask } from "../../lib/api";
 import { useApi } from "../../lib/hooks";
 import { TargetSelect } from "./GapHome";
+import { SampleSelect } from "./Samples";
 
 export default function NewSyllabus() {
   const nav = useNavigate();
@@ -12,7 +13,7 @@ export default function NewSyllabus() {
   const [utdCourse, setUtdCourse] = useState<{ id: string; code: string; title: string } | null>(null);
   const utd = useApi<{ available: boolean; reason?: string; syllabi: { term: string; section: string; url: string; professors: string[] }[] }>(utdCourse ? `/gap/utd-syllabi?course_id=${utdCourse.id}` : null);
   const [file, setFile] = useState<File | null>(null);
-  const [f, setF] = useState({ title: "", code: "", semester: "Spring 2026", text: "", target: "auto" });
+  const [f, setF] = useState({ title: "", code: "", semester: "Spring 2026", text: "", target: "auto", sample_id: "" });
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("Uploading…");
@@ -59,6 +60,7 @@ export default function NewSyllabus() {
             </div>
             <Field label="Semester"><input className="input" value={f.semester} onChange={(e) => setF({ ...f, semester: e.target.value })} /></Field>
             <Field label="Compare against"><TargetSelect includeAuto value={f.target} onChange={(v) => setF({ ...f, target: v })} /></Field>
+            <Field label="Documented job sample" hint="Overrides “Compare against”; recommended for the pilot"><SampleSelect value={f.sample_id || null} onChange={(v) => setF({ ...f, sample_id: v ?? "" })} /></Field>
           </div>
         </Card>
         <Card>

@@ -35,20 +35,36 @@ def _snippet(text: str, start: int, end: int, pad: int = 70) -> str:
     return ("…" if s else "") + " ".join(text[s:e].split()) + ("…" if e < len(text) else "")
 
 
-def extract_builtin(text: str) -> dict[str, dict]:
-    """Return {skill_name: {"mentions": int, "evidence": str}} for skills found in text."""
+def _line(text: str, start: int, end: int, limit: int = 240) -> str:
+    """The source line containing a match (trimmed around it), e.g. 'Week 3: Data wrangling with dplyr …'."""
+    ls = text.rfind("\n", 0, start) + 1
+    le = text.find("\n", end)
+    le = len(text) if le == -1 else le
+    line = " ".join(text[ls:le].split())
+    if len(line) <= limit:
+        return line
+    rel = start - ls
+    s = max(0, rel - limit // 2)
+    return ("…" if s else "") + line[s:s + limit].strip() + "…"
+
+
+def extract_builtin(text: str, max_excerpts: int = 3) -> dict[str, dict]:
+    """{skill: {"mentions": int, "evidence": first excerpt, "excerpts": [up to 3 distinct source lines]}}."""
     found: dict[str, dict] = {}
     if not text:
         return found
     for name, pats in _matchers():
-        count, first = 0, None
-        for p in pats:
-            for m in p.finditer(text):
-                count += 1
-                if first is None or m.start() < first[0]:
-                    first = (m.start(), m.end())
-        if count:
-            found[name] = {"mentions": count, "evidence": _snippet(text, *first)}
+        hits = sorted(((m.start(), m.end()) for p in pats for m in p.finditer(text)))
+        if not hits:
+            continue
+        excerpts: list[str] = []
+        for s, e in hits:
+            ln = _line(text, s, e)
+            if ln and ln not in excerpts:
+                excerpts.append(ln)
+            if len(excerpts) >= max_excerpts:
+                break
+        found[name] = {"mentions": len(hits), "evidence": excerpts[0] if excerpts else _snippet(text, *hits[0]), "excerpts": excerpts}
     return found
 
 
@@ -92,7 +108,7 @@ def extract(text: str, kind: str = "document") -> tuple[dict[str, dict], str]:
         if n in found:
             found[n]["mentions"] += 1
         else:
-            found[n] = {"mentions": 1, "evidence": s.evidence[:300], "importance": s.importance}
+            found[n] = {"mentions": 1, "evidence": s.evidence[:300], "excerpts": [f"(AI) {s.evidence[:240]}"], "importance": s.importance}
     return found, "claude"
 
 

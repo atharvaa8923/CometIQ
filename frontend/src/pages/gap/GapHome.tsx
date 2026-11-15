@@ -7,13 +7,15 @@ import { useApi } from "../../lib/hooks";
 import { useToast } from "../../lib/toast";
 import Jobs from "./Jobs";
 import Market from "./Market";
+import Pilot from "./Pilot";
 import ProgramHeatmap from "./ProgramHeatmap";
+import Samples from "./Samples";
 
-interface Syl { id: string; title: string; code: string | null; semester: string | null; skill_count: number; created_at: string;
+interface Syl { id: string; title: string; code: string | null; semester: string | null; skill_count: number; created_at: string; pilot_approved?: boolean;
   latest: { id: string; score: number; target: string } | null }
 
 export default function GapHome() {
-  const [tab, setTab] = useState<"syllabi" | "market" | "program" | "jobs">("syllabi");
+  const [tab, setTab] = useState<"syllabi" | "market" | "program" | "jobs" | "samples" | "pilot">(() => (new URLSearchParams(location.search).get("tab") as "pilot") ?? "syllabi");
   const { data, loading, reload } = useApi<Syl[]>("/gap/syllabi");
   const toast = useToast();
   const del = async (s: Syl) => {
@@ -26,7 +28,8 @@ export default function GapHome() {
         actions={<Link to="/gap/new" className="btn-primary"><FileUp className="h-4 w-4" />Analyze a syllabus</Link>} />
       <Tabs value={tab} onChange={setTab} tabs={[
         { id: "syllabi", label: "My syllabi" }, { id: "market", label: "Market demand" },
-        { id: "program", label: "Program heatmap" }, { id: "jobs", label: "Job postings" }]} />
+        { id: "program", label: "Program heatmap" }, { id: "jobs", label: "Job postings" },
+        { id: "samples", label: "Job samples" }, { id: "pilot", label: "Pilot review" }]} />
       {tab === "syllabi" && (loading ? <Spinner /> : !data?.length ? (
         <Empty icon={<ScanSearch className="h-8 w-8" />} title="No syllabi yet">Upload a syllabus (PDF, DOCX or text) to compare it with current job postings.
           <div className="mt-4"><Link to="/gap/new" className="btn-primary">Analyze a syllabus</Link></div></Empty>
@@ -38,6 +41,7 @@ export default function GapHome() {
                 <div>
                   <div className="text-xs font-semibold text-flame-600">{s.code ?? "No course code"} {s.semester && `· ${s.semester}`}</div>
                   <div className="font-bold text-comet-900">{s.title}</div>
+                  {s.pilot_approved && <span className="chip mt-1 bg-green-50 text-green-800">Approved for pilot</span>}
                 </div>
                 <button className="rounded p-1 text-slate-500 hover:bg-red-50 hover:text-red-600" onClick={() => del(s)} aria-label={`Delete ${s.title}`}><Trash2 className="h-4 w-4" /></button>
               </div>
@@ -58,6 +62,8 @@ export default function GapHome() {
       {tab === "market" && <Market />}
       {tab === "program" && <ProgramHeatmap />}
       {tab === "jobs" && <Jobs />}
+      {tab === "samples" && <Samples />}
+      {tab === "pilot" && <Pilot />}
     </div>
   );
 }

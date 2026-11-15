@@ -1,14 +1,17 @@
-import { ExternalLink, Search } from "lucide-react";
+import { BadgeCheck, ExternalLink, Search } from "lucide-react";
 import { useState } from "react";
 import LiveCourse from "../components/LiveCourse";
 import GraphMap from "./GraphMap";
 import { Badge, Card, Modal, PageHeader, Spinner, Tabs } from "../components/ui";
+import { api } from "../lib/api";
+import { useAuth } from "../lib/auth";
 import { useApi } from "../lib/hooks";
 
 interface CourseBrief { id: string; code: string; title: string; credits: number }
 interface Program { id: string; name: string; type: string; department: string; total_sch: number; is_stem: boolean; core_count: number; concentrations: { id: string; name: string }[] }
 interface ProgramDetail extends Omit<Program, "concentrations" | "core_count"> {
   core_sch: number; elective_sch: number; catalog_url: string; prereq_notes: string;
+  catalog_year: string | null; catalog_confirmed_by: string | null; catalog_confirmed_at: string | null; catalog_note: string | null;
   core: (CourseBrief & { or_group: number })[];
   concentrations: { id: string; name: string; required_sch: number; notes: string; courses: CourseBrief[] }[];
 }
@@ -46,7 +49,7 @@ export function CourseModal({ id, onClose }: { id: string | null; onClose: () =>
 }
 
 function ProgramView({ id, onCourse }: { id: string; onCourse: (id: string) => void }) {
-  const { data, loading } = useApi<ProgramDetail>(`/programs/${id}`);
+  const { data, loading, reload } = useApi<ProgramDetail>(`/programs/${id}`);
   if (loading || !data) return <Spinner />;
   const CourseChip = ({ c }: { c: CourseBrief }) => (
     <button onClick={() => onCourse(c.id)} className="rounded-md border border-slate-200 px-2 py-1 text-left text-xs hover:border-comet-400 hover:bg-comet-50">
@@ -59,6 +62,7 @@ function ProgramView({ id, onCourse }: { id: string; onCourse: (id: string) => v
         <Badge color="green">{data.type}</Badge><Badge>{data.total_sch} SCH</Badge>{data.is_stem && <Badge color="blue">STEM</Badge>}
         {data.catalog_url && <a href={data.catalog_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold text-flame-600">Catalog <ExternalLink className="h-3 w-3" /></a>}
       </div>
+      <CatalogYear p={data} onSaved={reload} />
       {data.prereq_notes && <p className="text-xs text-slate-500"><b>Program prerequisites:</b> {data.prereq_notes}</p>}
       <div><div className="label">Core ({data.core_sch} SCH)</div>
         <div className="flex flex-wrap gap-2">{data.core.map((c) => <div key={c.id} className="flex items-center gap-1">{c.or_group > 0 && <Badge color="orange">OR {c.or_group}</Badge>}<CourseChip c={c} /></div>)}</div>
@@ -123,6 +127,36 @@ export default function Catalog() {
         </Card>
       )}
       <CourseModal id={course} onClose={() => setCourse(null)} />
+    </div>
+  );
+}
+
+function CatalogYear({ p, onSaved }: { p: ProgramDetail; onSaved: () => void }) {
+  const { user } = useAuth();
+  const [edit, setEdit] = useState(false);
+  const [f, setF] = useState({ catalog_year: p.catalog_year ?? "", confirmed_by: "", note: "" });
+  const [err, setErr] = useState<string | null>(null);
+  const save = async () => {
+    setErr(null);
+    try { await api.put(`/programs/${p.id}/catalog-confirmation`, f); setEdit(false); onSaved(); } catch (e) { setErr((e as Error).message); }
+  };
+  return (
+    <div className="rounded-lg border border-slate-200 p-3 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-semibold text-slate-700">Catalog year {p.catalog_year ?? "unknown"}</span>
+        {p.catalog_confirmed_by
+          ? <span className="chip bg-green-50 text-green-800"><BadgeCheck className="h-3.5 w-3.5" aria-hidden />Confirmed by {p.catalog_confirmed_by}{p.catalog_confirmed_at ? `, ${new Date(p.catalog_confirmed_at).toLocaleDateString()}` : ""}</span>
+          : <span className="chip bg-amber-50 text-amber-800">Not yet confirmed with the program owner</span>}
+        {user?.role === "admin" && !edit && <button className="btn-ghost btn-sm" onClick={() => setEdit(true)}>Record confirmation</button>}
+      </div>
+      {p.catalog_note && <p className="mt-1 text-xs text-slate-500">{p.catalog_note}</p>}
+      {edit && <div className="mt-3 grid gap-2 sm:grid-cols-[110px_1fr_1fr_auto]">
+        <div><label className="label" htmlFor="cy">Year</label><input id="cy" className="input" placeholder="2025-26" value={f.catalog_year} onChange={(e) => setF({ ...f, catalog_year: e.target.value })} /></div>
+        <div><label className="label" htmlFor="cby">Confirmed by</label><input id="cby" className="input" placeholder="Program director name" value={f.confirmed_by} onChange={(e) => setF({ ...f, confirmed_by: e.target.value })} /></div>
+        <div><label className="label" htmlFor="cnote">Note</label><input id="cnote" className="input" placeholder="e.g. by email on 12 Nov" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} /></div>
+        <div className="flex items-end gap-1"><button className="btn-primary btn-sm" onClick={save} disabled={f.confirmed_by.trim().length < 3}>Save</button><button className="btn-ghost btn-sm" onClick={() => setEdit(false)}>Cancel</button></div>
+        {err && <p role="alert" className="text-red-700 sm:col-span-4">{err}</p>}
+      </div>}
     </div>
   );
 }

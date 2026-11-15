@@ -1,0 +1,64 @@
+# Render Blueprint — SEPARATE faculty-only pilot environment for CometIQ.
+# It has its own database, secret and URL, and shares nothing with the demo or a future production deployment.
+# Render dashboard → New → Blueprint → choose this repository and this file (render.pilot.yaml).
+databases:
+  - name: cometiq-pilot-db
+    plan: basic-256mb              # paid plan: Render takes daily backups with point-in-time recovery (free databases have none)
+    databaseName: cometiq_pilot
+    user: cometiq_pilot
+
+services:
+  - type: web
+    name: cometiq-pilot
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: false              # the pilot only changes when someone deploys a reviewed release on purpose
+    envVars:
+      - key: ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase: { name: cometiq-pilot-db, property: connectionString }
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SEED_DEMO
+        value: "false"             # no demo accounts, no fictional postings
+      - key: PILOT_ROLES
+        value: admin,faculty       # students, advisors and employers can't register or sign in
+      - key: ORG_NAME
+        value: The University of Texas at Dallas
+      - key: BOOTSTRAP_ADMIN_EMAIL
+        sync: false                # the pilot administrator's UTD address
+      - key: BOOTSTRAP_ADMIN_PASSWORD
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: JOB_SYNC_ENABLED
+        value: "false"             # the pilot uses documented, frozen job samples; sync only on purpose
+      - key: ADZUNA_APP_ID
+        sync: false
+      - key: ADZUNA_APP_KEY
+        sync: false
+      - key: USAJOBS_API_KEY
+        sync: false
+      - key: USAJOBS_EMAIL
+        sync: false
+      - key: NEBULA_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false                # optional; leave empty to keep extraction fully deterministic for the pilot
+      - key: AI_DAILY_LIMIT_PER_ORG
+        value: "200"
+      - key: EMAIL_PROVIDER
+        value: resend
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: LOG_FORMAT
+        value: json

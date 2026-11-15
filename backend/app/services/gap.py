@@ -51,35 +51,69 @@ def priority(demand: float) -> str:
     return "low"
 
 
-def market_demand(db: Session, target: str = ALL, org_id: str | None = None) -> tuple[list[dict], int]:
-    """Skill demand across open postings for a role family (or all roles)."""
+def market_job_ids(db: Session, target: str = ALL, org_id: str | None = None) -> list[str]:
+    """Open postings visible to the organization, optionally for one role family."""
     jobs = select(Job.id).where(Job.is_open)
     if org_id:
         jobs = jobs.where((Job.org_id == org_id) | Job.org_id.is_(None))
     if target and target != ALL:
         jobs = jobs.where(Job.role_family == target)
-    job_ids = list(db.scalars(jobs))
+    return list(db.scalars(jobs))
+
+
+def _day(d) -> str | None:
+    return d.date().isoformat() if d else None
+
+
+def market_demand(db: Session, target: str = ALL, org_id: str | None = None,
+                  job_ids: list[str] | None = None) -> tuple[list[dict], int]:
+    """Skill demand across a set of postings (a frozen sample when job_ids is given, else current open postings),
+    with provenance per skill: required/preferred counts, sources and posting-date range."""
+    if job_ids is None:
+        job_ids = market_job_ids(db, target, org_id)
     n = len(job_ids)
     if not n:
         return [], 0
     rows = db.execute(
-        select(Skill, JobSkill.importance, JobSkill.job_id).join(JobSkill, JobSkill.skill_id == Skill.id)
-        .where(JobSkill.job_id.in_(job_ids))
+        select(Skill, JobSkill.importance, Job.source, Job.posted_at).join(JobSkill, JobSkill.skill_id == Skill.id)
+        .join(Job, Job.id == JobSkill.job_id).where(JobSkill.job_id.in_(job_ids))
     ).all()
     agg: dict[int, dict] = {}
-    for skill, imp, _ in rows:
+    for skill, imp, source, posted in rows:
         a = agg.setdefault(skill.id, {"skill_id": skill.id, "name": skill.name, "category": skill.category,
-                                       "is_emerging": skill.is_emerging, "w": 0.0, "jobs": 0, "required": 0})
+                                       "is_emerging": skill.is_emerging, "w": 0.0, "jobs": 0, "required": 0,
+                                       "sources": defaultdict(int), "first": None, "last": None})
         a["w"] += IMPORTANCE_W.get(imp, 1.0)
         a["jobs"] += 1
         a["required"] += imp == "required"
+        a["sources"][source] += 1
+        if posted:
+            a["first"] = min(a["first"], posted) if a["first"] else posted
+            a["last"] = max(a["last"], posted) if a["last"] else posted
     out = []
     for a in agg.values():
         out.append({"skill_id": a["skill_id"], "name": a["name"], "category": a["category"], "is_emerging": a["is_emerging"],
                     "demand": round(a["w"] / n, 4), "job_count": a["jobs"], "job_share": round(a["jobs"] / n, 4),
-                    "required_share": round(a["required"] / max(a["jobs"], 1), 4)})
+                    "required_share": round(a["required"] / max(a["jobs"], 1), 4),
+                    "required_count": a["required"], "preferred_count": a["jobs"] - a["required"],
+                    "sources": dict(sorted(a["sources"].items(), key=lambda kv: -kv[1])),
+                    "first_posted": _day(a["first"]), "last_posted": _day(a["last"])})
     out.sort(key=lambda x: (-x["demand"], x["name"]))
     return out, n
+
+
+def sample_summary(db: Session, job_ids: list[str]) -> dict:
+    """Where the postings came from and when: shown with every analysis so the evidence is auditable."""
+    rows = db.execute(select(Job.source, Job.posted_at, Job.role_family).where(Job.id.in_(job_ids))).all() if job_ids else []
+    sources: dict[str, int] = defaultdict(int)
+    roles: dict[str, int] = defaultdict(int)
+    dates = [r[1] for r in rows if r[1]]
+    for src, _, role in rows:
+        sources[src] += 1
+        roles[role or "Unclassified"] += 1
+    return {"total": len(rows), "sources": dict(sorted(sources.items(), key=lambda kv: -kv[1])),
+            "role_families": dict(sorted(roles.items(), key=lambda kv: -kv[1])),
+            "date_from": _day(min(dates)) if dates else None, "date_to": _day(max(dates)) if dates else None}
 
 
 def detect_target(db: Session, skill_names: set[str], org_id: str) -> str:
@@ -121,11 +155,28 @@ class _AIInsights(BaseModel):
     recommendations: list[_AIRec]
 
 
-def analyze(db: Session, syl: Syllabus, target: str | None = None, top_n: int = 30) -> GapAnalysis:
+def analyze(db: Session, syl: Syllabus, target: str | None = None, top_n: int = 30, sample_id: str | None = None) -> GapAnalysis:
+    from datetime import datetime, timezone
+
+    from ..models import JobSample
+
     skills = {ss.skill.name: ss for ss in syl.skills}
-    if not target or target == "auto":
-        target = detect_target(db, set(skills), syl.org_id)
-    demand, n_jobs = market_demand(db, target, syl.org_id)
+    sample = db.get(JobSample, sample_id) if sample_id else None
+    if sample and sample.org_id != syl.org_id:
+        sample = None
+    if sample:
+        job_ids = list(sample.job_ids)
+        target = f"Sample: {sample.name}"
+    else:
+        if not target or target == "auto":
+            target = detect_target(db, set(skills), syl.org_id)
+        job_ids = market_job_ids(db, target, syl.org_id)
+    demand, n_jobs = market_demand(db, target, syl.org_id, job_ids=job_ids)
+    provenance = {**sample_summary(db, job_ids), "captured_at": datetime.now(timezone.utc).isoformat(),
+                  "kind": "documented sample" if sample else "live open postings",
+                  "sample": {"id": sample.id, "name": sample.name, "method": sample.method, "criteria": sample.criteria,
+                             "created_at": sample.created_at.isoformat()} if sample else None,
+                  "criteria": None if sample else {"role_family": target, "status": "open postings at time of analysis"}}
     market = demand[:top_n]
     topics_text = " ".join(syl.topics or []).lower()
 
@@ -139,7 +190,9 @@ def analyze(db: Session, syl: Syllabus, target: str | None = None, top_n: int = 
         else:
             status = "partial"
         rows.append({**d, "status": status, "priority": priority(d["demand"]),
-                     "mentions": ss.mentions if ss else 0, "evidence": ss.evidence if ss else None})
+                     "mentions": ss.mentions if ss else 0, "evidence": ss.evidence if ss else None,
+                     "excerpts": (ss.excerpts or ([ss.evidence] if ss.evidence else [])) if ss else [],
+                     "in_schedule": bool(ss) and d["name"].lower() in topics_text})
         c = cat[d["category"]]
         c["demand"] += d["demand"]
         c["earned"] += d["demand"] * STATUS_W[status]
@@ -161,7 +214,8 @@ def analyze(db: Session, syl: Syllabus, target: str | None = None, top_n: int = 
 
     counts = {s: sum(r["status"] == s for r in rows) for s in STATUS_W}
     result = {
-        "target": target, "job_count": n_jobs, "top_n": len(rows), "counts": counts,
+        "target": target, "job_count": n_jobs, "top_n": len(rows), "counts": counts, "provenance": provenance,
+        "score_basis": "mentions",
         "skills": rows, "gaps": gaps, "strengths": strengths, "emerging": emerging,
         "categories": [{"category": k, "skills": v["skills"], "coverage": round(100 * v["earned"] / v["demand"], 1) if v["demand"] else 0}
                        for k, v in sorted(cat.items(), key=lambda kv: -kv[1]["demand"])],
@@ -175,16 +229,19 @@ def analyze(db: Session, syl: Syllabus, target: str | None = None, top_n: int = 
         result["recommendations"] = [r.model_dump() | {"source": "claude"} for r in ai_res.recommendations]
         engine = "claude"
 
-    ga = GapAnalysis(syllabus_id=syl.id, target=target, score=score, job_count=n_jobs, result=result, engine=engine)
+    ga = GapAnalysis(syllabus_id=syl.id, target=target, score=score, job_count=n_jobs, result=result, engine=engine,
+                     sample_id=sample.id if sample else None)
     db.add(ga)
     db.flush()
+    carry_over_reviews(db, ga)
     return ga
 
 
 def _builtin_summary(score, counts, gaps, target, n_jobs) -> str:
     level = "strong" if score >= 70 else "moderate" if score >= 45 else "limited"
     top = ", ".join(g["name"] for g in gaps[:3]) or "none"
-    return (f"Against {n_jobs} current {target if target != ALL else ''} postings, this syllabus shows {level} alignment "
+    where = f"the {n_jobs} postings in the job sample “{target[8:]}”" if target.startswith("Sample: ") else f"{n_jobs} current {target if target != ALL else ''} postings"
+    return (f"Against {where}, this syllabus shows {level} alignment "
             f"({score}%). It fully covers {counts['covered']} of the top {sum(counts.values())} in-demand skills, partially covers "
             f"{counts['partial']}, and misses {counts['missing']}. Highest-impact gaps: {top}.").replace("  ", " ")
 
@@ -196,7 +253,7 @@ def _builtin_recommendations(gaps, emerging, n_jobs, target) -> list[dict]:
         where = f" It is already taught in {', '.join(g['taught_in'])} — consider a prerequisite link or shared materials." if g["taught_in"] else ""
         verb = "Add" if g["status"] == "missing" else "Deepen"
         recs.append({"title": f"{verb} {g['name']}",
-                     "detail": f"{round(g['demand'] * 100)}% weighted demand across {n_jobs} {target} postings "
+                     "detail": f"{round(g['demand'] * 100)}% weighted demand across {n_jobs} {('sampled' if target.startswith('Sample: ') else target)} postings "
                                f"({g['priority']} priority). Suggested: {act}.{where}",
                      "skills": [g["name"]], "source": "builtin"})
     em_missing = [e["name"] for e in emerging if e["status"] != "covered"]
@@ -255,3 +312,69 @@ def program_heatmap(db: Session, program: Program, target: str, top_n: int = 20)
     score = round(100 * sum(d["demand"] * covered_any[d["skill_id"]] for d in market) / total, 1)
     return {"program": program.name, "target": target, "job_count": n, "score": score,
             "skills": [{**d, "program_coverage": covered_any[d["skill_id"]]} for d in market], "courses": matrix}
+
+
+# ── Faculty review ─────────────────────────────────────────────────────────────
+# The system only detects mentions. Faculty decide whether students practice or demonstrate the skill.
+FACULTY_STATUSES = {
+    "practiced": "Students practice or demonstrate it (assessed)",
+    "mentioned_only": "Mentioned or introduced, not practiced",
+    "not_covered": "Not covered",
+    "not_relevant": "Not relevant to this course",
+}
+IMPLIED = {"covered": "practiced", "partial": "mentioned_only", "missing": "not_covered"}  # what each mention signal suggests
+FACULTY_W = {"practiced": 1.0, "mentioned_only": 0.5, "not_covered": 0.0}
+
+
+def decision_for(system_status: str, faculty_status: str) -> str:
+    return "confirmed" if IMPLIED.get(system_status) == faculty_status else "corrected"
+
+
+def review_summary(result: dict, reviews: dict[int, "object"]) -> dict:
+    """Mention-based vs faculty-reviewed coverage. Reviewed score uses faculty classifications where they exist
+    (not-relevant skills leave the denominator) and the mention signal elsewhere."""
+    rows = result.get("skills", [])
+    total = earned = reviewed_w = 0.0
+    counts = {"reviewed": 0, "confirmed": 0, "corrected": 0, "planned": 0, "done": 0, "not_relevant": 0}
+    for r in rows:
+        rv = reviews.get(r["skill_id"])
+        if rv:
+            counts["reviewed"] += 1
+            counts[rv.decision] += 1
+            if rv.action in ("planned", "done"):
+                counts[rv.action] += 1
+            if rv.faculty_status == "not_relevant":
+                counts["not_relevant"] += 1
+                continue
+            w = FACULTY_W[rv.faculty_status]
+            reviewed_w += r["demand"]
+        else:
+            w = STATUS_W[r["status"]]
+        total += r["demand"]
+        earned += r["demand"] * w
+    demand_all = sum(r["demand"] for r in rows) or 1
+    gaps = [r for r in rows if r["status"] != "covered"]
+    return {**counts, "total": len(rows), "gaps_total": len(gaps),
+            "gaps_reviewed": sum(1 for g in gaps if g["skill_id"] in reviews),
+            "reviewed_score": round(100 * earned / total, 1) if total else None,
+            "reviewed_demand_share": round(100 * (reviewed_w + sum(r["demand"] for r in rows if (rv := reviews.get(r["skill_id"])) and rv.faculty_status == "not_relevant")) / demand_all, 1)}
+
+
+def carry_over_reviews(db: Session, ga: GapAnalysis) -> int:
+    """Re-running an analysis keeps faculty judgments for skills that are still in the report."""
+    from ..models import GapReview
+
+    prev = db.scalar(select(GapAnalysis).where(GapAnalysis.syllabus_id == ga.syllabus_id, GapAnalysis.id != ga.id,
+                                               GapAnalysis.target == ga.target).order_by(GapAnalysis.created_at.desc()).limit(1))
+    if not prev:
+        return 0
+    status = {r["skill_id"]: r["status"] for r in ga.result.get("skills", [])}
+    n = 0
+    for rv in db.scalars(select(GapReview).where(GapReview.analysis_id == prev.id)):
+        if rv.skill_id in status:
+            db.add(GapReview(analysis_id=ga.id, skill_id=rv.skill_id, reviewer_id=rv.reviewer_id, system_status=status[rv.skill_id],
+                             faculty_status=rv.faculty_status, decision=decision_for(status[rv.skill_id], rv.faculty_status),
+                             rationale=rv.rationale, action=rv.action, action_note=rv.action_note, carried_from=prev.id))
+            n += 1
+    db.flush()
+    return n

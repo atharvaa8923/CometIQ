@@ -73,7 +73,13 @@ class Settings(BaseSettings):
     ORG_JOIN_CODE: str = ""
     BOOTSTRAP_ADMIN_EMAIL: str = ""
     BOOTSTRAP_ADMIN_PASSWORD: str = ""
-    LOGIN_RATE_LIMIT: int = 10   # failed logins per email+IP per 15 minutes
+    LOGIN_RATE_LIMIT: int = 10
+    # Pilot: comma-separated roles allowed to register/sign in (e.g. "admin,faculty"). Empty = all roles.
+    PILOT_ROLES: str = ""
+
+    def allowed_roles(self) -> set[str] | None:
+        roles = {r.strip() for r in self.PILOT_ROLES.split(",") if r.strip()}
+        return roles or None   # failed logins per email+IP per 15 minutes
 
 
 def _normalize_db_url(url: str) -> str:

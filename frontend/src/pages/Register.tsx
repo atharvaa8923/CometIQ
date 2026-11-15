@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ErrorBox, Field } from "../components/ui";
 import { useAuth } from "../lib/auth";
@@ -10,6 +10,14 @@ export default function Register() {
   const [mode, setMode] = useState<"join" | "create">("join");
   const [f, setF] = useState({ full_name: "", email: "", password: "", role: "student", join_code: "", org_name: "", company: "" });
   const [agree, setAgree] = useState(false);
+  const [pilotRoles, setPilotRoles] = useState<string[] | null>(null);
+  useEffect(() => {
+    fetch("/api/auth/public-config").then((r) => r.json()).then((c) => {
+      if (c.pilot_roles) { setPilotRoles(c.pilot_roles); setF((x) => (c.pilot_roles.includes(x.role) ? x : { ...x, role: c.pilot_roles.find((r: string) => r !== "admin") ?? "faculty" })); }
+    }).catch(() => undefined);
+  }, []);
+  const ROLE_OPTIONS = ([["student", "Student"], ["faculty", "Faculty member"], ["advisor", "Academic advisor"], ["employer", "Employer / recruiter"]] as const)
+    .filter(([r]) => !pilotRoles || pilotRoles.includes(r));
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
@@ -44,9 +52,10 @@ export default function Register() {
         <Field label="Password" hint="At least 8 characters"><input className="input" type="password" minLength={8} required value={f.password} onChange={set("password")} /></Field>
         {mode === "join" ? (
           <>
+            {pilotRoles && <p className="rounded-lg bg-comet-50 p-3 text-sm text-comet-800">This is a faculty pilot. Accounts are limited to: {pilotRoles.join(", ")}.</p>}
             <Field label="I am a">
               <select className="input" value={f.role} onChange={set("role")}>
-                <option value="student">Student</option><option value="faculty">Faculty member</option><option value="advisor">Academic advisor</option><option value="employer">Employer / recruiter</option>
+                {ROLE_OPTIONS.map(([r, l]) => <option key={r} value={r}>{l}</option>)}
               </select>
             </Field>
             {f.role === "employer" && <Field label="Company"><input className="input" required value={f.company} onChange={set("company")} /></Field>}

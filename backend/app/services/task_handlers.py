@@ -19,7 +19,8 @@ def gap_analyze(db: Session, task: Task) -> dict:
     from ..routers.gap import run_analysis
 
     p = task.payload
-    return run_analysis(db, p["syllabus_id"], p.get("target", "auto"), p.get("top_n", 30), p.get("extract", False), task)
+    return run_analysis(db, p["syllabus_id"], p.get("target", "auto"), p.get("top_n", 30), p.get("extract", False), task,
+                        sample_id=p.get("sample_id"))
 
 
 @handler("forge.generate")

@@ -57,6 +57,9 @@ def current_user(
             changed = changed.replace(tzinfo=timezone.utc)
         if payload.get("ims", 0) < int(changed.timestamp() * 1000):
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session expired — please sign in again")
+    allowed = settings.allowed_roles()
+    if allowed and user.role not in allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This CometIQ pilot is limited to " + ", ".join(sorted(allowed)) + " accounts")
     from .services.tasks import current_org
 
     current_org.set(user.org_id)  # used by the AI usage cap

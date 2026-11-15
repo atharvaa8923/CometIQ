@@ -39,7 +39,8 @@ export default function Login() {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [demo, setDemo] = useState(false);
-  useEffect(() => { fetch("/api/auth/public-config").then((r) => r.json()).then((c) => setDemo(!!c.demo)).catch(() => setDemo(false)); }, []);
+  const [pilot, setPilot] = useState<string[] | null>(null);
+  useEffect(() => { fetch("/api/auth/public-config").then((r) => r.json()).then((c) => { setDemo(!!c.demo); setPilot(c.pilot_roles ?? null); }).catch(() => setDemo(false)); }, []);
 
   const submit = async (e?: React.FormEvent, creds?: [string, string]) => {
     e?.preventDefault();
@@ -54,6 +55,7 @@ export default function Login() {
     <AuthShell title="Sign in to CometIQ">
       <form onSubmit={submit} className="space-y-4">
         <ErrorBox error={err} />
+        {pilot && <p className="rounded-lg bg-comet-50 p-3 text-sm text-comet-800">Faculty pilot: sign-in is limited to {pilot.join(" and ")} accounts.</p>}
         <div><label className="label" htmlFor="email">Email</label><input id="email" className="input" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" /></div>
         <div><label className="label" htmlFor="pw">Password</label><input id="pw" className="input" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" /></div>
         <button className="btn-primary w-full" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
