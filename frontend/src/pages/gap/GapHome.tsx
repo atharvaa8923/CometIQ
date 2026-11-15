@@ -53,7 +53,10 @@ export default function GapHome() {
               ) : <div className="mt-4 text-xs text-slate-500">Not analyzed</div>}
               <div className="mt-4 flex items-center justify-between">
                 <Badge>{s.skill_count} skills detected</Badge>
-                {s.latest && <Link to={`/gap/analysis/${s.latest.id}`} className="text-sm font-semibold text-comet-700 hover:underline">View report →</Link>}
+                <span className="flex gap-3">
+                  <Link to={`/gap/course/${s.id}`} className="text-sm font-semibold text-slate-600 hover:underline" aria-label={`History of ${s.title}`}>History</Link>
+                  {s.latest && <Link to={`/gap/analysis/${s.latest.id}`} className="text-sm font-semibold text-comet-700 hover:underline">View report →</Link>}
+                </span>
               </div>
             </div>
           ))}

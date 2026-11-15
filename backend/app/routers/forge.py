@@ -71,6 +71,7 @@ class GenerateIn(BaseModel):
     weeks: int = Field(15, ge=8, le=18)
     framework: str = "AACSB"
     program_goals: list[str] | None = None
+    decision_ids: list[str] | None = None   # faculty decisions ("add to this course") this draft implements
 
 
 @router.post("/drafts", status_code=202)
@@ -101,6 +102,14 @@ def run_generate(db: Session, user: User, body: GenerateIn, task=None) -> dict:
     d = ForgeDraft(org_id=user.org_id, owner_id=user.id, syllabus_id=syl.id, analysis_id=ga.id if ga else None, version=version,
                    title=f"{syl.code or ''} {syl.title}".strip(), content=content.model_dump(), engine=engine)
     db.add(d)
+    db.flush()
+    if body.decision_ids:
+        from ..models import GapDecision
+
+        for dec in db.scalars(select(GapDecision).where(GapDecision.id.in_(body.decision_ids), GapDecision.syllabus_id == syl.id)):
+            dec.forge_draft_id = d.id
+            if dec.status == "open":
+                dec.status = "drafted"
     audit(db, user, "forge.generate", syllabus=syl.title, version=version, engine=engine)
     db.commit()
     return {"draft_id": d.id}

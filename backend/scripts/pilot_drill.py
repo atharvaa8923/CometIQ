@@ -71,6 +71,9 @@ with TestClient(app) as c:
     rv = c.put(f"/api/gap/analyses/{a['id']}/reviews/{sk['skill_id']}", headers=fh,
                json={"faculty_status": "not_relevant", "rationale": "Drill rationale written by the drill faculty person."})
     step("faculty review saved", rv.status_code == 200)
+    dc = c.put(f"/api/gap/analyses/{a['id']}/decisions/{sk['skill_id']}", headers=fh,
+               json={"decision": "out_of_scope", "rationale": "Drill decision recorded by the drill faculty person."})
+    step("faculty decision recorded (stores the reviewer's name)", dc.status_code == 200 and dc.json()["reviewer"] == "Drill Faculty Person")
 
     # 3 — backup and restore
     with tempfile.TemporaryDirectory() as tmp:

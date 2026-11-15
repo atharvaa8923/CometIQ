@@ -1,4 +1,5 @@
-import { CheckCircle2, ChevronDown, ChevronRight, ClipboardCheck, PencilLine, Quote } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, ClipboardCheck, Gavel, PencilLine, Quote } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useMemo, useState } from "react";
 import { Badge, Card } from "../../components/ui";
 import { api } from "../../lib/api";
@@ -13,6 +14,14 @@ export interface Review {
   skill_id: number; system_status: Status; faculty_status: string; decision: "confirmed" | "corrected"; rationale: string | null;
   action: "none" | "planned" | "done"; action_note: string | null; reviewer: string | null; carried_from: string | null; updated_at: string;
 }
+export interface Decision {
+  id: string; syllabus_id: string; skill_id: number; skill: string; analysis_id: string | null; decision: DecisionKind; decision_label: string;
+  rationale: string; covered_in: string[]; revisit_term: string | null; reviewer: string | null; decided_at: string;
+  evidence: Record<string, string | number | null>; status: "open" | "drafted" | "implemented" | "superseded"; forge_draft_id: string | null;
+  detected_in_version: number | null; implemented_note: string | null; superseded_by: string | null;
+}
+export type DecisionKind = "add_here" | "covered_elsewhere" | "defer" | "out_of_scope";
+export const DECISION_STATUS: Record<Decision["status"], string> = { open: "Open", drafted: "Draft linked", implemented: "Implemented", superseded: "Superseded" };
 export interface ReviewSummary {
   reviewed: number; confirmed: number; corrected: number; planned: number; done: number; not_relevant: number;
   total: number; gaps_total: number; gaps_reviewed: number; reviewed_score: number | null; reviewed_demand_share: number;
@@ -27,9 +36,10 @@ const PRIORITY_RANK: Record<string, number> = { critical: 0, high: 1, medium: 2,
 
 type Filter = "gaps" | "unreviewed" | "all";
 
-export function ReviewPanel({ analysisId, rows, jobCount, reviews, statuses, onChange }: {
-  analysisId: string; rows: EvidenceRow[]; jobCount: number; reviews: Record<string, Review>;
+export function ReviewPanel({ analysisId, syllabusId, rows, jobCount, reviews, statuses, onChange, decisions, decisionOptions, onDecision }: {
+  analysisId: string; syllabusId: string; rows: EvidenceRow[]; jobCount: number; reviews: Record<string, Review>;
   statuses: Record<string, string>; onChange: (reviews: Record<string, Review>, summary: ReviewSummary) => void;
+  decisions: Record<string, Decision>; decisionOptions: Record<string, string>; onDecision: (d: Decision) => void;
 }) {
   const [filter, setFilter] = useState<Filter>("gaps");
   const [open, setOpen] = useState<number | null>(null);
@@ -62,10 +72,14 @@ export function ReviewPanel({ analysisId, rows, jobCount, reviews, statuses, onC
                 <span><span className="font-medium text-slate-800">{r.name}</span> <Badge color={PRIORITY_COLOR[r.priority]}>{r.priority}</Badge></span>
                 <span className="hidden text-xs text-slate-600 sm:block"><b>{r.job_count}</b> of {jobCount} postings</span>
                 <StatusTag s={r.status} />
-                <span className="text-xs">{rv ? <ReviewChip rv={rv} /> : <span className="text-slate-500">Not reviewed</span>}</span>
+                <span className="text-xs">{rv ? <ReviewChip rv={rv} /> : <span className="text-slate-500">Not reviewed</span>}
+                  {decisions[r.skill_id] && <span className="chip mt-1 bg-violet-50 text-violet-800"><Gavel className="h-3.5 w-3.5" aria-hidden />{decisions[r.skill_id].decision_label}</span>}</span>
               </button>
               {isOpen && <ReviewEditor analysisId={analysisId} row={r} jobCount={jobCount} rv={rv} statuses={statuses}
                 onSaved={(next, summary) => { onChange(next, summary); }} reviews={reviews} />}
+              {isOpen && rv && rv.faculty_status !== "practiced" && (
+                <DecisionEditor key={decisions[r.skill_id]?.id ?? "new"} analysisId={analysisId} syllabusId={syllabusId} row={r}
+                  current={decisions[r.skill_id]} options={decisionOptions} onSaved={onDecision} />)}
             </div>);
         })}
       </div>
@@ -171,6 +185,74 @@ function ReviewEditor({ analysisId, row, jobCount, rv, statuses, reviews, onSave
           {rv && <span className="text-xs text-slate-500">Last saved by {rv.reviewer ?? "—"}, {new Date(rv.updated_at).toLocaleString()}{rv.carried_from ? " · carried over from the previous analysis" : ""}</span>}
         </div>
       </div>
+    </div>
+  );
+}
+
+const DECISION_HELP: Record<DecisionKind, string> = {
+  add_here: "Students should practice this skill in this course. You can generate a CometForge draft for all accepted additions.",
+  covered_elsewhere: "Another course in the program already teaches and assesses it.",
+  defer: "Worth doing, but not in this revision.",
+  out_of_scope: "Not this course's job, even though employers ask for it.",
+};
+
+function DecisionEditor({ analysisId, syllabusId, row, current, options, onSaved }: {
+  analysisId: string; syllabusId: string; row: EvidenceRow; current?: Decision; options: Record<string, string>; onSaved: (d: Decision) => void;
+}) {
+  const [kind, setKind] = useState<DecisionKind>(current?.decision ?? "add_here");
+  const [why, setWhy] = useState(current?.rationale ?? "");
+  const [codes, setCodes] = useState((current?.covered_in ?? row.taught_in ?? []).join(", "));
+  const [term, setTerm] = useState(current?.revisit_term ?? "");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const id = `dec-${row.skill_id}`;
+  const save = async () => {
+    setBusy(true); setErr(null);
+    try {
+      onSaved(await api.put<Decision>(`/gap/analyses/${analysisId}/decisions/${row.skill_id}`, {
+        decision: kind, rationale: why, covered_in: codes.split(",").map((c) => c.trim()).filter(Boolean), revisit_term: term }));
+    } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+  };
+  const e = current?.evidence;
+  return (
+    <div className="border-t border-violet-100 bg-violet-50/40 px-4 py-4">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 font-semibold text-slate-800"><Gavel className="h-4 w-4 text-violet-700" aria-hidden />Course decision</div>
+        <Link to={`/gap/course/${syllabusId}?tab=decisions`} className="text-xs font-semibold text-comet-700 hover:underline">All decisions for this course →</Link>
+      </div>
+      <fieldset>
+        <legend className="sr-only">What should happen with {row.name}?</legend>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {(Object.keys(options) as DecisionKind[]).map((k) => (
+            <label key={k} className={`cursor-pointer rounded-lg border p-2.5 text-sm ${kind === k ? "border-violet-500 bg-white ring-1 ring-violet-500" : "border-slate-200 bg-white hover:border-slate-300"}`}>
+              <span className="flex items-center gap-2 font-semibold text-slate-800"><input type="radio" name={id} checked={kind === k} onChange={() => setKind(k)} />{options[k]}</span>
+              <span className="mt-1 block text-xs text-slate-600">{DECISION_HELP[k]}</span>
+            </label>))}
+        </div>
+      </fieldset>
+      <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_280px]">
+        <div>
+          <label className="label" htmlFor={`${id}-why`}>Rationale (required)</label>
+          <textarea id={`${id}-why`} className="input min-h-[64px]" value={why} onChange={(ev) => setWhy(ev.target.value)}
+            placeholder="e.g. Every analyst posting asks for it and no other required course has students use it." />
+        </div>
+        <div>
+          {kind === "covered_elsewhere" && <><label className="label" htmlFor={`${id}-codes`}>Covered in (course codes)</label>
+            <input id={`${id}-codes`} className="input" value={codes} onChange={(ev) => setCodes(ev.target.value)} placeholder="BUAN 6320, MIS 6326" /></>}
+          {kind === "defer" && <><label className="label" htmlFor={`${id}-term`}>Revisit in</label>
+            <input id={`${id}-term`} className="input" value={term} onChange={(ev) => setTerm(ev.target.value)} placeholder="Fall 2027" /></>}
+        </div>
+      </div>
+      {err && <p role="alert" className="mt-2 text-sm text-red-700">{err}</p>}
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <button className="btn-primary btn-sm" onClick={save} disabled={busy || why.trim().length < 10}>{current ? "Record new decision" : "Record decision"}</button>
+        {current && <span className="text-xs text-slate-600">
+          Current: <b>{current.decision_label}</b> by {current.reviewer ?? "—"}, {new Date(current.decided_at).toLocaleDateString()} · {DECISION_STATUS[current.status]}
+          {e && <> · based on syllabus v{e.syllabus_version ?? "?"}, sample “{e.sample_name}”, catalog {e.catalog_year ?? "n/a"}, scoring {e.scoring_version ?? "n/a"}</>}
+          {current.forge_draft_id && <> · <Link className="font-semibold text-comet-700 hover:underline" to={`/gap/course/${syllabusId}?tab=proposed`}>view proposed change</Link></>}
+        </span>}
+      </div>
+      {current && <p className="mt-1 text-xs text-slate-500">Recording a new decision keeps this one in the course history.</p>}
     </div>
   );
 }

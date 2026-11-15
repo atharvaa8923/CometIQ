@@ -231,7 +231,45 @@ class JobSample(Base):
     method: Mapped[str] = mapped_column(Text, default="")        # how/why these postings were selected
     criteria: Mapped[dict] = mapped_column(JSON, default=dict)    # role family, sources, date range, location, query
     job_ids: Mapped[list] = mapped_column(JSON, default=list)     # frozen at creation
+    # documented = created by faculty with a method; auto = snapshot of the live postings taken by an analysis
+    kind: Mapped[str] = mapped_column(String(20), default="documented", server_default="documented")
+    # {job_id: {"source", "posted", "role", "skills": [[skill name, importance], ...]}} — the demand inputs, frozen,
+    # so a report can be recomputed even after postings are re-extracted, closed or deleted
+    snapshot: Mapped[dict | None] = mapped_column(JSON)
+    content_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class SyllabusVersion(Base):
+    """One saved version of a course syllabus (usually one per semester), with the skills extracted from it."""
+    __tablename__ = "syllabus_versions"
+    __table_args__ = (UniqueConstraint("syllabus_id", "version"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    syllabus_id: Mapped[str] = mapped_column(ForeignKey("syllabi.id", ondelete="CASCADE"), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    semester: Mapped[str | None] = mapped_column(String(40))
+    filename: Mapped[str | None] = mapped_column(String(300))
+    raw_text: Mapped[str] = mapped_column(Text, default="")
+    text_hash: Mapped[str] = mapped_column(String(64))
+    topics: Mapped[list] = mapped_column(JSON, default=list)
+    skills: Mapped[dict] = mapped_column(JSON, default=dict)     # {skill name: {"mentions", "excerpts"}}
+    extraction_engine: Mapped[str] = mapped_column(String(20), default="builtin")
+    taxonomy_version: Mapped[str | None] = mapped_column(String(20))
+    change_note: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class CatalogVersion(Base):
+    """Catalog entry for a course (title, description, prerequisites, programs and catalog year) as used by an analysis."""
+    __tablename__ = "catalog_versions"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    course_code: Mapped[str] = mapped_column(String(30), index=True)
+    catalog_year: Mapped[str | None] = mapped_column(String(20))
+    content_hash: Mapped[str] = mapped_column(String(64))
+    snapshot: Mapped[dict] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
@@ -264,11 +302,43 @@ class GapAnalysis(Base):
     syllabus_id: Mapped[str] = mapped_column(ForeignKey("syllabi.id", ondelete="CASCADE"), index=True)
     target: Mapped[str] = mapped_column(String(120))  # role family or "All roles"
     sample_id: Mapped[str | None] = mapped_column(ForeignKey("job_samples.id", ondelete="SET NULL", name="fk_gap_analyses_sample_id"))
+    # recorded inputs: with these an analysis can be recomputed exactly (null on analyses made before versioning)
+    syllabus_version_id: Mapped[str | None] = mapped_column(ForeignKey("syllabus_versions.id", ondelete="SET NULL", name="fk_gap_analyses_syllabus_version_id"))
+    catalog_version_id: Mapped[str | None] = mapped_column(ForeignKey("catalog_versions.id", ondelete="SET NULL", name="fk_gap_analyses_catalog_version_id"))
+    scoring_version: Mapped[str | None] = mapped_column(String(20))
+    taxonomy_version: Mapped[str | None] = mapped_column(String(20))
+    top_n: Mapped[int | None] = mapped_column(Integer)
     score: Mapped[float] = mapped_column(Float)
     job_count: Mapped[int] = mapped_column(Integer, default=0)
     result: Mapped[dict] = mapped_column(JSON)
     engine: Mapped[str] = mapped_column(String(20), default="builtin")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class GapDecision(Base):
+    """What faculty decided to do about a reviewed gap. A new decision for the same course and skill supersedes the
+    previous one, which is kept as history. Evidence records exactly which inputs the decision was based on."""
+    __tablename__ = "gap_decisions"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    syllabus_id: Mapped[str] = mapped_column(ForeignKey("syllabi.id", ondelete="CASCADE"), index=True)
+    skill_id: Mapped[int] = mapped_column(ForeignKey("skills.id", ondelete="CASCADE"))
+    analysis_id: Mapped[str | None] = mapped_column(ForeignKey("gap_analyses.id", ondelete="SET NULL"))
+    decision: Mapped[str] = mapped_column(String(30))   # add_here | covered_elsewhere | defer | out_of_scope
+    rationale: Mapped[str] = mapped_column(Text)
+    covered_in: Mapped[list | None] = mapped_column(JSON)          # course codes, for covered_elsewhere
+    revisit_term: Mapped[str | None] = mapped_column(String(40))   # for defer
+    reviewer_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    reviewer_name: Mapped[str | None] = mapped_column(String(200))  # as it was when decided; cleared if the account is deleted
+    decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    evidence: Mapped[dict] = mapped_column(JSON, default=dict)      # syllabus/sample/catalog/scoring versions + review
+    status: Mapped[str] = mapped_column(String(20), default="open")  # open | drafted | implemented | superseded
+    forge_draft_id: Mapped[str | None] = mapped_column(ForeignKey("forge_drafts.id", ondelete="SET NULL", name="fk_gap_decisions_forge_draft_id"))
+    detected_in_version: Mapped[int | None] = mapped_column(Integer)  # syllabus version whose mention signal suggests it was done
+    implemented_note: Mapped[str | None] = mapped_column(Text)
+    superseded_by: Mapped[str | None] = mapped_column(String(32))
+
+    skill: Mapped[Skill] = relationship()
 
 
 # ── CometForge ─────────────────────────────────────────────────────────────────

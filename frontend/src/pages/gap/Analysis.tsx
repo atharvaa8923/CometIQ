@@ -1,4 +1,4 @@
-import { BadgeCheck, BookOpen, Database, Download, FileSpreadsheet, Lightbulb, RefreshCw, ScanSearch, Sparkles, TrendingUp } from "lucide-react";
+import { BadgeCheck, BookOpen, Database, History, ShieldCheck, Download, FileSpreadsheet, Lightbulb, RefreshCw, ScanSearch, Sparkles, TrendingUp } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Badge, Card, PageHeader, ScoreRing, Spinner, ErrorBox } from "../../components/ui";
@@ -6,17 +6,25 @@ import { api, download, waitForTask } from "../../lib/api";
 import { useApi } from "../../lib/hooks";
 import { STATUS, StatusLegend, StatusTag, type Status } from "../../lib/viz";
 import { TargetSelect } from "./GapHome";
-import { ReviewPanel, type EvidenceRow, type Review, type ReviewSummary } from "./ReviewPanel";
+import { ReviewPanel, type Decision, type EvidenceRow, type Review, type ReviewSummary } from "./ReviewPanel";
 import { SampleSelect, type Provenance } from "./Samples";
 
 interface SkillRow extends EvidenceRow { is_emerging: boolean }
 interface Analysis {
   id: string; syllabus: { id: string; title: string; code: string | null; semester: string | null; pilot_approved: boolean; approved_by: string | null };
-  sample_id: string | null; provenance?: Provenance; reviews: Record<string, Review>; review_summary: ReviewSummary; faculty_statuses: Record<string, string>;
+  sample_id: string | null; provenance?: Provenance; inputs: Inputs; decisions: Record<string, Decision>; decision_options: Record<string, string>; reviews: Record<string, Review>; review_summary: ReviewSummary; faculty_statuses: Record<string, string>;
   score: number; target: string; job_count: number; engine: string; created_at: string; summary: string;
   counts: Record<Status, number>; skills: SkillRow[]; gaps: SkillRow[]; strengths: { name: string; mentions: number; in_market: boolean }[];
   emerging: { name: string; demand: number; status: Status }[]; categories: { category: string; coverage: number; skills: number }[];
   recommendations: { title: string; detail: string; skills: string[]; source: string }[];
+}
+
+export interface Inputs {
+  recorded: boolean;
+  syllabus?: { id: string; version: number; semester: string | null; text_hash: string; created_at: string; change_note: string | null; engine: string };
+  sample?: { id: string; kind: string; name: string; hash: string; total: number; date_from: string | null; date_to: string | null };
+  catalog?: { id: string; catalog_year: string | null; hash: string; title: string; confirmed_by: string | null } | null;
+  scoring_version?: string; taxonomy_version?: string; current_scoring_version?: string; current_taxonomy_version?: string; top_n?: number;
 }
 
 export default function Analysis() {
@@ -49,6 +57,7 @@ export default function Analysis() {
           <button className="btn-ghost btn-sm" onClick={() => download(`/gap/analyses/${a.id}/export.pdf`, `CometGap-${file}.pdf`)}><Download className="h-4 w-4" />PDF</button>
           <button className="btn-ghost btn-sm" onClick={() => download(`/gap/analyses/${a.id}/export.xlsx`, `CometGap-${file}.xlsx`)}><FileSpreadsheet className="h-4 w-4" />Excel</button>
           <button className="btn-ghost btn-sm" onClick={() => download(`/gap/analyses/${a.id}/findings.csv`, `CometGap-findings-${file}.csv`)}><FileSpreadsheet className="h-4 w-4" />Findings CSV</button>
+          <Link to={`/gap/course/${a.syllabus.id}`} className="btn-ghost btn-sm"><History className="h-4 w-4" />Course history</Link>
           <Link to={`/forge/new?analysis=${a.id}`} className="btn-accent btn-sm"><BookOpen className="h-4 w-4" />Fix gaps with CometForge</Link>
         </>} />
 
@@ -132,8 +141,10 @@ export default function Analysis() {
         </div>
       </div>
 
-      <ReviewPanel analysisId={a.id} rows={a.skills} jobCount={a.job_count} reviews={a.reviews} statuses={a.faculty_statuses}
-        onChange={(reviews, review_summary) => setData({ ...a, reviews, review_summary })} />
+      <ReviewPanel analysisId={a.id} syllabusId={a.syllabus.id} rows={a.skills} jobCount={a.job_count} reviews={a.reviews} statuses={a.faculty_statuses}
+        onChange={(reviews, review_summary) => setData({ ...a, reviews, review_summary })}
+        decisions={a.decisions} decisionOptions={a.decision_options}
+        onDecision={(d) => setData({ ...a, decisions: { ...a.decisions, [d.skill_id]: d } })} />
 
       <div className="grid gap-6">
         <Card title="What this course already teaches">
@@ -169,6 +180,7 @@ function EvidenceCard({ a, onApproval }: { a: Analysis; onApproval: (s: { pilot_
         <div><dt className="text-xs font-semibold uppercase text-slate-500">Captured</dt><dd className="text-slate-800">{new Date(p.captured_at).toLocaleString()}</dd></div>
         {p.sample?.method && <div className="sm:col-span-2"><dt className="text-xs font-semibold uppercase text-slate-500">Sampling method</dt><dd className="text-slate-700">{p.sample.method}</dd></div>}
       </dl> : <p className="text-sm text-slate-500">This analysis predates evidence tracking. Re-run it to record the job sample.</p>}
+      <InputsRow aid={a.id} inputs={a.inputs} />
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 text-sm">
         {a.syllabus.pilot_approved
           ? <><span className="chip bg-green-50 text-green-800"><BadgeCheck className="h-3.5 w-3.5" aria-hidden />Approved for the pilot</span>
@@ -183,5 +195,34 @@ function EvidenceCard({ a, onApproval }: { a: Analysis; onApproval: (s: { pilot_
         {err && <span role="alert" className="text-red-700">{err}</span>}
       </div>
     </Card>
+  );
+}
+
+interface Repro { reproducible: boolean; exact?: boolean; reason?: string; stored_score?: number; recomputed_score?: number; current_method_score?: number; scoring_version?: string }
+
+export function InputsRow({ aid, inputs }: { aid: string; inputs: Inputs }) {
+  const [r, setR] = useState<Repro | null>(null);
+  const [busy, setBusy] = useState(false);
+  const check = async () => { setBusy(true); try { setR(await api.get<Repro>(`/gap/analyses/${aid}/reproduce`)); } finally { setBusy(false); } };
+  if (!inputs.recorded) return <p className="mt-4 border-t border-slate-100 pt-3 text-xs text-slate-500">This report was made before inputs were versioned. Re-run it to record them.</p>;
+  const old = inputs.scoring_version !== inputs.current_scoring_version;
+  return (
+    <div className="mt-4 border-t border-slate-100 pt-3 text-sm">
+      <div className="mb-1 text-xs font-semibold uppercase text-slate-500">Recorded inputs</div>
+      <div className="flex flex-wrap gap-1.5 text-xs">
+        <span className="chip bg-slate-100 text-slate-700">Syllabus v{inputs.syllabus?.version}{inputs.syllabus?.semester ? ` · ${inputs.syllabus.semester}` : ""}</span>
+        <span className="chip bg-slate-100 text-slate-700">Job sample {inputs.sample?.kind === "auto" ? "snapshot" : `“${inputs.sample?.name}”`} · {inputs.sample?.total} postings</span>
+        <span className="chip bg-slate-100 text-slate-700">Catalog {inputs.catalog?.catalog_year ?? "n/a"}</span>
+        <span className={`chip ${old ? "bg-amber-50 text-amber-800" : "bg-slate-100 text-slate-700"}`}>Scoring {inputs.scoring_version}{old ? ` (current: ${inputs.current_scoring_version})` : ""}</span>
+        <span className="chip bg-slate-100 text-slate-700">Skill list {inputs.taxonomy_version}</span>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button className="btn-ghost btn-sm" onClick={check} disabled={busy}><ShieldCheck className="h-4 w-4" />Verify reproducibility</button>
+        {r && (r.reproducible
+          ? <span role="status" className={r.exact ? "text-green-800" : "text-red-700"}>{r.exact ? `Recomputed from the recorded inputs: ${r.recomputed_score}% — identical to this report.` : `Recomputed ${r.recomputed_score}% vs stored ${r.stored_score}%.`}
+              {r.current_method_score !== undefined && ` The current scoring method would give ${r.current_method_score}%.`}</span>
+          : <span role="status" className="text-slate-600">{r.reason}</span>)}
+      </div>
+    </div>
   );
 }

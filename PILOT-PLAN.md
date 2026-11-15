@@ -45,7 +45,10 @@ live feed changes.
      lab or rubric you checked;
    - set the **follow-up**: no action, change planned (say what), or change made.
 3. Optionally review covered skills to catch false positives (a skill that is mentioned but not practiced).
-4. Do not change the syllabus text during the review. Re-run the analysis only after the review window. Reviews carry forward.
+4. For each gap that is not practiced, record the **course decision**: *add to this course*, *covered elsewhere* (name the course),
+   *defer* (say when to revisit), or *out of scope*, with a rationale. Then use **Course history → Decisions → Create CometForge draft** to see
+   the accepted additions beside the current syllabus.
+5. Do not change the syllabus text during the review. Re-run the analysis only after the review window. Reviews carry forward.
 
 ## 4. What we measure
 
@@ -57,6 +60,7 @@ All of it is on **CometGap → Pilot review** and in **All findings (CSV)**.
 | Agreement rate | confirmed ÷ reviewed | Is the mention signal a useful starting point? |
 | Correction rate and type | corrected ÷ reviewed, and the most common corrections (e.g. missing → practiced = vocabulary gap; covered → mentioned only = false coverage) | Where the extraction needs work |
 | Action rate | (change planned + change made) ÷ reviewed | Did the findings lead to curriculum decisions? |
+| Decision mix | add here / covered elsewhere / defer / out of scope, and how many additions were implemented in the next syllabus version | What faculty actually do with a gap |
 | Score difference | mention-based vs faculty-reviewed coverage | How far the automated score is from faculty judgment |
 | Time per review | from faculty debrief | Is the workflow practical? |
 

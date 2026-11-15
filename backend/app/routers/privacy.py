@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import (
-    GapReview, JobSample, PasswordReset, Task,
+    GapDecision, GapReview, JobSample, PasswordReset, SyllabusVersion, Task,
     Application, AuditLog, Evidence, ForgeDraft, Job, Notification, PlanReview, StudentCourse, StudentProfile, Syllabus, User,
 )
 from ..security import audit, current_user, require_roles, verify_password
@@ -95,6 +95,8 @@ def erase(db: Session, user: User) -> None:
     db.execute(update(AuditLog).where(AuditLog.user_id == uid).values(user_id=None, detail=None))
     # faculty judgments stay as institutional records of the course, without the reviewer's identity
     db.execute(update(GapReview).where(GapReview.reviewer_id == uid).values(reviewer_id=None))
+    db.execute(update(GapDecision).where(GapDecision.reviewer_id == uid).values(reviewer_id=None, reviewer_name=None))
+    db.execute(update(SyllabusVersion).where(SyllabusVersion.created_by == uid).values(created_by=None))
     db.execute(update(JobSample).where(JobSample.created_by == uid).values(created_by=None))
     db.execute(delete(PasswordReset).where(PasswordReset.user_id == uid))
     # background jobs they started, and queued/sent emails addressed to them (payloads can hold the address)

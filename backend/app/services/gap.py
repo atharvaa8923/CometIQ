@@ -155,51 +155,42 @@ class _AIInsights(BaseModel):
     recommendations: list[_AIRec]
 
 
-def analyze(db: Session, syl: Syllabus, target: str | None = None, top_n: int = 30, sample_id: str | None = None) -> GapAnalysis:
+def analyze(db: Session, syl: Syllabus, target: str | None = None, top_n: int = 30, sample_id: str | None = None,
+            user_id: str | None = None, extraction_engine: str = "builtin", change_note: str | None = None) -> GapAnalysis:
+    """Score a syllabus against a job sample. All inputs are versioned and recorded on the analysis (see services/versions)."""
     from datetime import datetime, timezone
 
     from ..models import JobSample
+    from . import versions as vs
 
-    skills = {ss.skill.name: ss for ss in syl.skills}
+    sv = vs.ensure_version(db, syl, user_id=user_id, engine=extraction_engine, change_note=change_note)
     sample = db.get(JobSample, sample_id) if sample_id else None
     if sample and sample.org_id != syl.org_id:
         sample = None
     if sample:
-        job_ids = list(sample.job_ids)
+        vs.ensure_snapshot(db, sample)
         target = f"Sample: {sample.name}"
     else:
         if not target or target == "auto":
-            target = detect_target(db, set(skills), syl.org_id)
-        job_ids = market_job_ids(db, target, syl.org_id)
-    demand, n_jobs = market_demand(db, target, syl.org_id, job_ids=job_ids)
-    provenance = {**sample_summary(db, job_ids), "captured_at": datetime.now(timezone.utc).isoformat(),
-                  "kind": "documented sample" if sample else "live open postings",
+            target = detect_target(db, set(sv.skills), syl.org_id)
+        sample = vs.auto_sample(db, syl.org_id, target, market_job_ids(db, target, syl.org_id))
+    documented = sample.kind != "auto"
+    demand, n_jobs = vs.demand_from_snapshot(sample.snapshot, vs.skill_meta(db))
+    cv = vs.catalog_version(db, syl.org_id, syl.code)
+    provenance = {**vs.snapshot_summary(sample.snapshot), "captured_at": datetime.now(timezone.utc).isoformat(),
+                  "kind": "documented sample" if documented else "live open postings (snapshot saved)",
+                  "snapshot_id": sample.id,
                   "sample": {"id": sample.id, "name": sample.name, "method": sample.method, "criteria": sample.criteria,
-                             "created_at": sample.created_at.isoformat()} if sample else None,
-                  "criteria": None if sample else {"role_family": target, "status": "open postings at time of analysis"}}
-    market = demand[:top_n]
-    topics_text = " ".join(syl.topics or []).lower()
-
-    rows, cat = [], defaultdict(lambda: {"demand": 0.0, "earned": 0.0, "skills": 0})
-    for d in market:
-        ss = skills.get(d["name"])
-        if not ss:
-            status = "missing"
-        elif ss.mentions >= 2 or d["name"].lower() in topics_text:
-            status = "covered"
-        else:
-            status = "partial"
-        rows.append({**d, "status": status, "priority": priority(d["demand"]),
-                     "mentions": ss.mentions if ss else 0, "evidence": ss.evidence if ss else None,
-                     "excerpts": (ss.excerpts or ([ss.evidence] if ss.evidence else [])) if ss else [],
-                     "in_schedule": bool(ss) and d["name"].lower() in topics_text})
-        c = cat[d["category"]]
-        c["demand"] += d["demand"]
-        c["earned"] += d["demand"] * STATUS_W[status]
+                             "created_at": sample.created_at.isoformat()} if documented else None,
+                  "criteria": None if documented else {"role_family": target, "status": "open postings at time of analysis"}}
+    rows, score = vs.score(sv.skills, sv.topics, demand, top_n)
+    cat = defaultdict(lambda: {"demand": 0.0, "earned": 0.0, "skills": 0})
+    for r in rows:
+        c = cat[r["category"]]
+        c["demand"] += r["demand"]
+        c["earned"] += r["demand"] * STATUS_W[r["status"]]
         c["skills"] += 1
-
-    total = sum(r["demand"] for r in rows) or 1
-    score = round(100 * sum(r["demand"] * STATUS_W[r["status"]] for r in rows) / total, 1)
+    skills = sv.skills
     gaps = [r for r in rows if r["status"] != "covered"]
     gaps.sort(key=lambda r: (r["status"] != "missing", -r["demand"]))
     elsewhere = _other_courses_teaching(db, syl.org_id, [g["skill_id"] for g in gaps], syl.code)
@@ -207,7 +198,7 @@ def analyze(db: Session, syl: Syllabus, target: str | None = None, top_n: int = 
         g["taught_in"] = elsewhere.get(g["skill_id"], [])
 
     market_names = {d["name"] for d in demand}
-    strengths = sorted(({"name": n, "mentions": s.mentions, "in_market": n in market_names} for n, s in skills.items()),
+    strengths = sorted(({"name": n, "mentions": s["mentions"], "in_market": n in market_names} for n, s in skills.items()),
                        key=lambda x: (-x["in_market"], -x["mentions"]))
     emerging = [{"name": d["name"], "demand": d["demand"], "status": next((r["status"] for r in rows if r["name"] == d["name"]),
                  "covered" if d["name"] in skills else "missing")} for d in demand if d["is_emerging"]][:10]
@@ -230,10 +221,14 @@ def analyze(db: Session, syl: Syllabus, target: str | None = None, top_n: int = 
         engine = "claude"
 
     ga = GapAnalysis(syllabus_id=syl.id, target=target, score=score, job_count=n_jobs, result=result, engine=engine,
-                     sample_id=sample.id if sample else None)
+                     sample_id=sample.id, syllabus_version_id=sv.id, catalog_version_id=cv.id if cv else None,
+                     scoring_version=vs.SCORING_VERSION, taxonomy_version=vs.taxonomy_version(), top_n=top_n)
     db.add(ga)
     db.flush()
     carry_over_reviews(db, ga)
+    from .decisions import detect_implementation
+
+    detect_implementation(db, ga)
     return ga
 
 
