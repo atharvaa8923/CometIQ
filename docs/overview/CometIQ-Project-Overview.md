@@ -24,6 +24,7 @@ frontend and backend. All screenshots come from the running application with its
    - [4.7 CometPath: degree and career planner](#47-cometpath-degree-and-career-planner)
    - [4.8 CometMatch: students and employers](#48-cometmatch-students-and-employers)
    - [4.9 Advising, verification and the knowledge graph](#49-advising-verification-and-the-knowledge-graph)
+   - [4.10 Scorecard, copilot, simulator, skill stacks, partner projects and Ask CometIQ](#410-scorecard-copilot-simulator-skill-stacks-partner-projects-and-ask-cometiq)
 5. [How the scores work](#5-how-the-scores-work)
 6. [Architecture](#6-architecture)
 7. [Tools and technologies](#7-tools-and-technologies)
@@ -42,13 +43,13 @@ frontend and backend. All screenshots come from the running application with its
 
 | | |
 |---|---|
-| **Modules** | CometGap, CometForge, CometPath, CometMatch, and Curriculum (proposals, curriculum map, outcomes) |
+| **Modules** | CometGap, CometForge, CometPath, CometMatch, Curriculum (scorecard, proposals, curriculum map, simulator, skill stacks, outcomes) and Ask CometIQ |
 | **Roles** | Administrator, faculty, student, employer, academic advisor |
 | **Catalog data** | 39 JSOM graduate programs, 331 courses, 188 prerequisite links (the full UTD catalog can be imported from Nebula Labs) |
 | **Skill taxonomy** | 136 skills in 12 categories, with aliases (e.g. "pandas" counts as Python) |
-| **Backend** | Python 3.13, FastAPI, SQLAlchemy, Alembic; about 9,500 lines; 154 API endpoints; 38 database tables; 4 migrations |
-| **Frontend** | React 19, TypeScript, Tailwind CSS, Vite; about 5,300 lines |
-| **Tests** | 71 automated API tests (about 1,300 lines), passing on both SQLite and PostgreSQL |
+| **Backend** | Python 3.13, FastAPI, SQLAlchemy, Alembic, LangGraph; about 10,900 lines; 173 API endpoints; 42 database tables; 5 migrations |
+| **Frontend** | React 19, TypeScript, Tailwind CSS, Vite; about 6,100 lines |
+| **Tests** | 75 automated API tests (about 1,500 lines), passing on both SQLite and PostgreSQL |
 | **Accessibility** | WCAG 2.1 AA checked with axe-core: no violations on any page |
 | **AI** | Claude (optional), plus a built-in engine that gives the same structured output without any API key |
 
@@ -294,6 +295,63 @@ completed it. Students can share a verification link.*
 ![Organization](images/04-organization.jpg)
 *Organization settings: the join code, people counts, system health, and live job-market sources (sync now, test connection).*
 
+### 4.10 Scorecard, copilot, simulator, skill stacks, partner projects and Ask CometIQ
+
+**Dean's program scorecard.** One page across every program: coverage of analyzed courses and its trend, priority gaps nobody has
+decided on, proposals waiting, in-demand skills never practiced or never mastered, badge holders, and a "needs attention" list.
+
+![Program scorecard](images/n1-scorecard.jpg)
+*Program scorecard with one program expanded: undecided gaps (linked to their reports), waiting proposals, analyzed courses, and skills never practiced or mastered.*
+
+**Syllabus copilot.** Edit a syllabus and the score, the skill changes, the posting evidence, the curriculum-map position and
+possible overlaps update as you type (about 0.2 s per update, using the built-in extractor and the course's recorded job sample).
+Save the result as a new semester version or open it directly as a curriculum proposal.
+
+![Syllabus copilot](images/n2-copilot.jpg)
+*"You added 'Week 15: SQL joins lab…': SQL moves from missing to covered, +10.7 points", with the 6 of 6 postings behind it.*
+
+**Program simulator.** Try a redesign on a copy of the program: set a skill's level, move a skill between courses, add or remove
+a course, add or remove a prerequisite. See program coverage, the I→P→M flags, the longest prerequisite chain and students'
+saved plans that would gain a problem (counts only). A circular prerequisite is rejected. Nothing is saved.
+
+![Program simulator](images/n3-simulator.jpg)
+*Two changes raise program coverage from 51% to 67.5% and leave two fewer in-demand skills unpracticed.*
+
+**Skill stacks.** Role-ready credentials made of faculty-verified badges (for example *Data Analyst = SQL + Excel + Tableau + Statistics*).
+Students see their progress and the next course for each missing skill in CometMatch and CometPath. Employers follow a stack and
+are notified when a student who is open to opportunities completes it. Faculty define and edit stacks.
+
+![Student skill stacks](images/n6-student-stacks.jpg)
+*A student's progress: Data Analyst 2 of 4, with each verified skill and where it was verified.*
+
+![Stack editor](images/n4-stacks-admin.jpg)
+*Faculty manage the stacks.*
+
+![Employer stack alerts](images/n9-employer-stacks.jpg)
+*Employers follow stacks and see who completed them.*
+
+**Employer-sponsored projects.** Faculty can share an accepted addition with employer partners. Partners see the course, the skill
+and a note written for them, never the internal rationale. They offer a project, dataset or guest session; faculty accept it,
+which creates a new CometForge draft whose team project is the sponsor's project. The instructor then records which students
+completed it. Each earns a badge naming the partner, and the sponsor gets first look at participants who are open to opportunities.
+
+![Faculty partners tab](images/n5-faculty-partners.jpg)
+*Course history → Partners: share accepted additions, accept or decline offers, record completion.*
+
+![Employer partner projects](images/n8-employer-projects.jpg)
+*The employer's view: shared needs, their offers and status, and first look at participants.*
+
+![Partner badge](images/n7-partner-badge.jpg)
+*The badge a participant earns.*
+
+**Ask CometIQ (LangGraph).** A chat that answers only from CometIQ's stored records, with numbered citations that link to the
+source pages. Built as a LangGraph state graph: understand → gather (read-only, permission-scoped queries) → write → verify. Claude
+classifies and writes when an API key is configured; otherwise rules and templates do. The verify step removes citations to records
+that do not exist, and the agent refuses to answer when it finds no records. "How this was answered" shows each step.
+
+![Ask CometIQ](images/n10-ask.jpg)
+*"Which priority gaps have no decision yet?" and "Draft the AACSB summary for Excel", each claim linked to its source.*
+
 ---
 
 ## 5. How the scores work
@@ -321,7 +379,8 @@ flowchart TB
     end
     subgraph Server["One Python process (FastAPI + Uvicorn)"]
         API[REST API /api/*<br/>154 endpoints · JWT auth · roles]
-        SVC[Services<br/>skills · gap · versions · decisions · proposals<br/>curriculum map · badges · forge · path · match · reports]
+        SVC[Services<br/>skills · gap · versions · decisions · proposals · curriculum map<br/>badges · stacks · scorecard · copilot · simulator · forge · path · match · reports]
+        AGENT[Ask CometIQ<br/>LangGraph: understand → gather → write → verify]
         Q[Background task queue<br/>DB-backed worker threads]
         STATIC[Serves the built React app]
     end
@@ -335,6 +394,8 @@ flowchart TB
     end
     UI -->|HTTPS JSON| API
     API --> SVC --> DB
+    API --> AGENT --> DB
+    AGENT --> CL
     API --> Q --> SVC
     SVC --> CL & NB & JB & EM
     API --> SE
@@ -383,6 +444,7 @@ palette, always shown with an icon and a label).
 | **Pydantic / pydantic-settings** | 2 | Request/response schemas, AI output schemas, configuration from environment variables |
 | **PyJWT + bcrypt** | — | Sign-in tokens (with revocation on password change) and password hashing |
 | **anthropic** SDK | 2.8 | Claude: structured outputs, streaming, server-side fallback, per-institution daily budget |
+| **LangGraph** | 1.2 | The Ask CometIQ agent: a state graph with conditional edges (understand → help or gather → write → verify) |
 | **httpx** | 0.28 | Calls to Nebula, Adzuna, USAJobs, GitHub and Resend |
 | **pdfplumber / python-docx** | — | Reading uploaded PDF and Word syllabi |
 | **ReportLab / python-docx / openpyxl** | — | PDF reports, Word documents (syllabi, change requests), Excel exports (reports, curriculum map) |
@@ -416,7 +478,7 @@ palette, always shown with an icon and a label).
 
 ## 8. Data model
 
-The 38 tables, grouped by purpose:
+The 42 tables, grouped by purpose:
 
 | Group | Tables |
 |---|---|
@@ -425,6 +487,7 @@ The 38 tables, grouped by purpose:
 | Job market | jobs, job_skills, job_samples (frozen, with posting snapshots), sync_runs |
 | CometGap | syllabi, syllabus_skills, syllabus_versions, catalog_versions, gap_analyses (with recorded inputs), gap_reviews, gap_decisions |
 | Curriculum | curriculum_proposals, proposal_comments, proposal_reviews, curriculum_map_entries |
+| Credentials and partners | skill_stacks, stack_subscriptions, stack_completions, sponsored_projects |
 | CometForge | forge_drafts |
 | CometPath | student_profiles, student_courses, plan_reviews |
 | CometMatch | applications, evidence, evidence_files, skill_badges |
@@ -459,14 +522,14 @@ The 38 tables, grouped by purpose:
 
 ## 10. Testing and quality
 
-- **71 automated tests** cover every module, role permissions, migrations (upgrade with existing data and downgrade), privacy and
+- **75 automated tests** cover every module, role permissions, migrations (upgrade with existing data and downgrade), privacy and
   erasure, versioning and reproducibility, decisions, proposals, the curriculum map, badges and outcomes. They pass on **SQLite
   and PostgreSQL 16**.
 - **Pilot drill** (`scripts/pilot_drill.py`), 15 checks on PostgreSQL:
   1. remove demo data;
   2. create a faculty member, a review and a decision;
   3. back up with `pg_dump` and restore into a separate database;
-  4. confirm the migration version and the row counts of all 38 tables match;
+  4. confirm the migration version and the row counts of all 42 tables match;
   5. delete the account and prove nothing is left.
 - **Browser walkthroughs** with Playwright for each feature, plus **axe-core** accessibility checks.
 - **Bugs found by testing and fixed** (examples):
@@ -490,8 +553,9 @@ cometiq/
 │   │   ├── security.py          JWT, passwords, role checks, audit
 │   │   ├── manage.py            ops CLI: remove-demo-data · restore-check · verify-erasure
 │   │   ├── routers/             auth · admin · catalog · dashboard · gap · forge · path · match · evidence
-│   │   │                        curriculum · badges · jobs · graphmap · notifications · privacy · tasks
+│   │   │                        curriculum · badges · partners · ask · jobs · graphmap · notifications · privacy · tasks
 │   │   ├── services/            skills · gap · versions · decisions · proposals · curriculum_map · badges
+│   │   │                        scorecard · copilot · simulator · stacks · ask (LangGraph)
 │   │   │                        forge · path · match · match_ai · jobs · sources · sync · nebula · syllabi
 │   │   │                        reports · email · notify · tasks · task_handlers · ai · parser
 │   │   └── data/                catalog.json · taxonomy · sample jobs · forge content library
@@ -521,9 +585,11 @@ cometiq/
 | **6. Faculty review and pilot** | Evidence per skill, documented job samples, faculty corrections with rationale, pilot tracking, faculty-only mode, catalog-year confirmation, syllabus approval, demo-data removal, restore and deletion drills, pilot plan, runbook and agreement. |
 | **7. Decisions and versions** | Faculty decision records linked to CometForge, side-by-side proposed changes, versioned syllabi, catalog and job samples, reproducible reports, semester-over-semester comparison with change attribution. |
 | **8. Curriculum and badges** | Pull-request-style curriculum proposals with a change request form, AACSB I/P/M curriculum map, faculty-verified skill badges with public verification, the employer filter, and privacy-safe outcomes. |
+| **9. Management, design and partnerships** | Dean's program scorecard, syllabus copilot, program simulator, skill stacks with employer alerts, employer-sponsored projects with partner badges, and Ask CometIQ (LangGraph agent with citations). |
 
-On GitHub, rounds 1–5 are on `main`. Rounds 6, 7 and 8 are on the branches `faculty-review-pilot`, `decision-records-and-versions`
-and `curriculum-proposals-and-badges`. Each branch builds on the previous one, so merging the last one brings in all three.
+On GitHub, rounds 1–5 are on `main`. Rounds 6–9 are on the branches `faculty-review-pilot`, `decision-records-and-versions`,
+`curriculum-proposals-and-badges` and `scorecard-copilot-simulator-stacks-projects-ask`. Each branch builds on the previous one, so
+merging the last one brings in all four.
 
 ---
 

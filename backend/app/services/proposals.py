@@ -88,7 +88,7 @@ def _evidence(db: Session, syl: Syllabus, content: dict | None, decisions: list[
 
 
 def create(db: Session, user: User, syl: Syllabus, title: str, summary: str, effective_term: str | None,
-           draft_id: str | None, start_from: str = "current") -> CurriculumProposal:
+           draft_id: str | None, start_from: str = "current", proposed_text: str | None = None) -> CurriculumProposal:
     draft = db.get(ForgeDraft, draft_id) if draft_id else None
     if draft_id and (not draft or draft.syllabus_id != syl.id or draft.org_id != user.org_id):
         raise HTTPException(404, "Draft not found for this course")
@@ -100,6 +100,8 @@ def create(db: Session, user: User, syl: Syllabus, title: str, summary: str, eff
         text = proposed_from_current(base.raw_text, content)
     else:
         text = base.raw_text
+    if proposed_text and proposed_text.strip():
+        text = proposed_text  # written in the syllabus copilot
     decisions = list(db.scalars(select(GapDecision).where(GapDecision.syllabus_id == syl.id, GapDecision.status.in_(("open", "drafted", "implemented")))))
     number = (db.scalar(select(func.max(CurriculumProposal.number)).where(CurriculumProposal.org_id == user.org_id)) or 0) + 1
     p = CurriculumProposal(org_id=user.org_id, number=number, syllabus_id=syl.id, title=title.strip(), summary=summary.strip(),

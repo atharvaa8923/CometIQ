@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import monitoring
 from .config import get_settings
-from .routers import admin, auth, badges, catalog, curriculum, dashboard, evidence, forge, gap, graphmap, jobs, match, notifications, path, privacy, tasks
+from .routers import admin, ask, auth, badges, catalog, curriculum, dashboard, partners, evidence, forge, gap, graphmap, jobs, match, notifications, path, privacy, tasks
 from .seed import init_db
 
 settings = get_settings()
@@ -61,7 +61,7 @@ async def security_headers(request, call_next):
 
 
 for r in (auth.router, admin.router, catalog.router, dashboard.router, gap.router, jobs.router, forge.router, path.router, path.advising, match.router, evidence.router, graphmap.router, notifications.router, tasks.router, privacy.router,
-          curriculum.router, badges.router, badges.public):
+          curriculum.router, badges.router, badges.public, partners.router, ask.router):
     app.include_router(r)
 
 

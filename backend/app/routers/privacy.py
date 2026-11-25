@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..models import (
     CurriculumMapEntry, CurriculumProposal, GapDecision, GapReview, JobSample, PasswordReset, ProposalComment, ProposalReview, SkillBadge,
-    SyllabusVersion, Task,
+    SponsoredProject, StackCompletion, StackSubscription, SyllabusVersion, Task,
     Application, AuditLog, Evidence, ForgeDraft, Job, Notification, PlanReview, StudentCourse, StudentProfile, Syllabus, User,
 )
 from ..security import audit, current_user, require_roles, verify_password
@@ -99,6 +99,9 @@ def erase(db: Session, user: User) -> None:
     db.execute(update(GapDecision).where(GapDecision.reviewer_id == uid).values(reviewer_id=None, reviewer_name=None))
     db.execute(update(SyllabusVersion).where(SyllabusVersion.created_by == uid).values(created_by=None))
     db.execute(delete(SkillBadge).where(SkillBadge.student_id == uid))
+    db.execute(delete(StackCompletion).where(StackCompletion.student_id == uid))
+    db.execute(delete(StackSubscription).where(StackSubscription.employer_id == uid))
+    db.execute(update(SponsoredProject).where(SponsoredProject.employer_id == uid).values(employer_id=None))
     db.execute(update(CurriculumProposal).where(CurriculumProposal.author_id == uid).values(author_id=None, author_name=None))
     db.execute(update(ProposalComment).where(ProposalComment.author_id == uid).values(author_id=None, author_name=None))
     db.execute(update(ProposalReview).where(ProposalReview.reviewer_id == uid).values(reviewer_id=None, reviewer_name=None))

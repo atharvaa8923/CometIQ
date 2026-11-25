@@ -6,6 +6,8 @@ import { useApi } from "../../lib/hooks";
 import { useToast } from "../../lib/toast";
 import { AiExplain, Breakdown, FitBadge, type MatchResult } from "./Breakdown";
 import TalentSearch from "./TalentSearch";
+import PartnerProjects from "./PartnerProjects";
+import { EmployerStacks } from "./Stacks";
 
 interface EJob { id: string; title: string; location: string | null; employment_type: string; is_open: boolean; applications: number; skills: { name: string; importance: string }[] }
 interface Cand extends MatchResult { student: { id: string; name: string; headline: string | null; program: string | null; concentration: string | null; career_goal: string | null; has_resume: boolean }; application: { status: string; initiated_by: string } | null }
@@ -60,7 +62,7 @@ function PostJob({ open, onClose, onPosted }: { open: boolean; onClose: () => vo
 
 export default function EmployerMatch() {
   const toast = useToast();
-  const [tab, setTab] = useState<"jobs" | "cands" | "talent" | "pipeline">("cands");
+  const [tab, setTab] = useState<"jobs" | "cands" | "talent" | "pipeline" | "stacks" | "partners">("cands");
   const jobs = useApi<EJob[]>("/match/employer/jobs");
   const [jid, setJid] = useState("");
   const [open, setOpen] = useState(false);
@@ -76,7 +78,10 @@ export default function EmployerMatch() {
     <div className="space-y-5">
       <PageHeader icon={<BriefcaseBusiness className="h-5 w-5" />} accent="navy" title="CometMatch" subtitle="Find students whose verified skills fit your roles"
         actions={<button className="btn-accent" onClick={() => setOpen(true)}><Plus className="h-4 w-4" />Post a job</button>} />
-      <Tabs value={tab} onChange={setTab} tabs={[{ id: "cands", label: "Ranked candidates" }, { id: "talent", label: "Talent search" }, { id: "jobs", label: `My jobs${jobs.data ? ` (${jobs.data.length})` : ""}` }, { id: "pipeline", label: "Hiring pipeline" }]} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ id: "cands", label: "Ranked candidates" }, { id: "talent", label: "Talent search" }, { id: "jobs", label: `My jobs${jobs.data ? ` (${jobs.data.length})` : ""}` }, { id: "pipeline", label: "Hiring pipeline" },
+        { id: "stacks", label: "Skill stack alerts" }, { id: "partners", label: "Partner projects" }]} />
+      {tab === "stacks" && <EmployerStacks />}
+      {tab === "partners" && <PartnerProjects />}
 
       {tab === "cands" && (!jobs.data?.length ? <Empty icon={<BriefcaseBusiness className="h-8 w-8" />} title="Post your first job">CometIQ extracts the skills and ranks matching students instantly.</Empty> : (
         <Card padded={false} title={<select className="input w-96 py-1.5" value={jid} onChange={(e) => setJid(e.target.value)} aria-label="Job">{jobs.data.map((j) => <option key={j.id} value={j.id}>{j.title} — {j.location}</option>)}</select>}>

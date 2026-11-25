@@ -726,3 +726,16 @@ def proposed(sid: str, draft_id: str | None = None, user: User = Depends(faculty
     drafts = [{"id": x.id, "version": x.version, "status": x.status, "created_at": x.created_at}
               for x in db.scalars(select(ForgeDraft).where(ForgeDraft.syllabus_id == syl.id).order_by(ForgeDraft.version.desc()))]
     return {**decsvc.proposed_changes(db, syl, draft, accepted), "drafts": drafts}
+
+
+# ── Syllabus copilot ───────────────────────────────────────────────────────────
+class CopilotIn(BaseModel):
+    syllabus_id: str
+    text: str = Field(max_length=200000)
+
+
+@router.post("/copilot/preview")
+def copilot_preview(body: CopilotIn, user: User = Depends(faculty), db: Session = Depends(get_db)):
+    from ..services import copilot
+
+    return copilot.preview(db, _own(db, user, body.syllabus_id), body.text)

@@ -16,6 +16,7 @@ from ..services import curriculum_map as cmap
 from ..services import gap as gapsvc
 from ..services import parser, tasks
 from ..services import proposals as psvc
+from ..services import scorecard as scsvc
 from ..services.notify import notify
 
 router = APIRouter(prefix="/api/curriculum", tags=["curriculum"])
@@ -65,12 +66,13 @@ class ProposalIn(BaseModel):
     effective_term: str | None = Field(None, max_length=40)
     draft_id: str | None = None
     start_from: str = "current"   # current: current syllabus + marked additions · draft: the full CometForge draft
+    proposed_text: str | None = Field(None, max_length=200000)   # e.g. from the syllabus copilot
 
 
 @router.post("/proposals", status_code=201)
 def create_proposal(body: ProposalIn, user: User = Depends(faculty), db: Session = Depends(get_db)):
     syl = _syllabus(db, user, body.syllabus_id)
-    p = psvc.create(db, user, syl, body.title, body.summary, body.effective_term, body.draft_id, body.start_from)
+    p = psvc.create(db, user, syl, body.title, body.summary, body.effective_term, body.draft_id, body.start_from, body.proposed_text)
     audit(db, user, "curriculum.proposal.create", number=p.number, course=syl.code)
     db.commit()
     return psvc.out(db, p, True)
@@ -333,3 +335,23 @@ def decision_outcomes(did: str, user: User = Depends(faculty), db: Session = Dep
     if not d or d.org_id != user.org_id:
         raise HTTPException(404, "Decision not found")
     return badgesvc.outcomes(db, d)
+
+
+# ── Dean's program scorecard ───────────────────────────────────────────────────
+@router.get("/scorecard")
+def scorecard(target: str = gapsvc.ALL, user: User = Depends(faculty), db: Session = Depends(get_db)):
+    return scsvc.build(db, user.org_id, target)
+
+
+
+# ── Program simulator ──────────────────────────────────────────────────────────
+class SimulateIn(BaseModel):
+    target: str = gapsvc.ALL
+    ops: list[dict] = Field(default_factory=list, max_length=100)
+
+
+@router.post("/programs/{pid}/simulate")
+def simulate(pid: str, body: SimulateIn, user: User = Depends(faculty), db: Session = Depends(get_db)):
+    from ..services import simulator
+
+    return simulator.simulate(db, _program(db, user, pid), body.ops, body.target)

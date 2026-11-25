@@ -8,6 +8,7 @@ import { StatusTag, type Status } from "../../lib/viz";
 import type { Inputs } from "./Analysis";
 import { DECISION_STATUS, type Decision } from "./ReviewPanel";
 import { SampleSelect } from "./Samples";
+import Partners from "./Partners";
 
 interface Version { id: string; version: number; semester: string | null; filename: string | null; created_at: string; change_note: string | null; text_hash: string; skill_count: number; engine: string; created_by: string | null }
 interface Report { id: string; created_at: string; score: number; target: string; job_count: number; inputs: Inputs }
@@ -37,7 +38,7 @@ const fmt = (v: number) => `${v > 0 ? "+" : v < 0 ? "−" : "±"}${Math.abs(v).t
 export default function CourseHistory() {
   const { sid } = useParams();
   const [params, setParams] = useSearchParams();
-  const tab = (params.get("tab") as "time" | "decisions" | "proposed") ?? "time";
+  const tab = (params.get("tab") as "time" | "decisions" | "proposed" | "partners") ?? "time";
   const { data, loading, error, reload } = useApi<HistoryData>(`/gap/syllabi/${sid}/history`);
   const [upload, setUpload] = useState(false);
   if (loading && !data) return <Spinner />;
@@ -48,12 +49,14 @@ export default function CourseHistory() {
       <PageHeader icon={<History className="h-5 w-5" />} title={`${s.code ?? ""} ${s.title}`} subtitle="Course history: versions, decisions and proposed changes"
         actions={<>
           {s.latest && <Link to={`/gap/analysis/${s.latest.id}`} className="btn-ghost btn-sm">Latest report</Link>}
+          <Link to={`/gap/copilot/${s.id}`} className="btn-accent btn-sm"><Sparkles className="h-4 w-4" />Edit with copilot</Link>
           <button className="btn-primary btn-sm" onClick={() => setUpload(true)}><FileUp className="h-4 w-4" />Upload new semester version</button>
         </>} />
-      <Tabs value={tab} onChange={(t) => setParams({ tab: t })} tabs={[{ id: "time", label: "Changes over time" }, { id: "decisions", label: "Decisions" }, { id: "proposed", label: "Proposed changes" }]} />
+      <Tabs value={tab} onChange={(t) => setParams({ tab: t })} tabs={[{ id: "time", label: "Changes over time" }, { id: "decisions", label: "Decisions" }, { id: "proposed", label: "Proposed changes" }, { id: "partners", label: "Partners" }]} />
       {tab === "time" && <OverTime data={data} />}
       {tab === "decisions" && <Decisions sid={s.id} />}
       {tab === "proposed" && <Proposed sid={s.id} />}
+      {tab === "partners" && <Partners sid={s.id} />}
       <UploadVersion open={upload} onClose={() => setUpload(false)} sid={s.id} onDone={() => { setUpload(false); reload(); }} />
     </div>
   );

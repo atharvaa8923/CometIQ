@@ -58,6 +58,7 @@ export default function Analysis() {
           <button className="btn-ghost btn-sm" onClick={() => download(`/gap/analyses/${a.id}/export.xlsx`, `CometGap-${file}.xlsx`)}><FileSpreadsheet className="h-4 w-4" />Excel</button>
           <button className="btn-ghost btn-sm" onClick={() => download(`/gap/analyses/${a.id}/findings.csv`, `CometGap-findings-${file}.csv`)}><FileSpreadsheet className="h-4 w-4" />Findings CSV</button>
           <Link to={`/gap/course/${a.syllabus.id}`} className="btn-ghost btn-sm"><History className="h-4 w-4" />Course history</Link>
+          <Link to={`/gap/copilot/${a.syllabus.id}`} className="btn-ghost btn-sm"><Sparkles className="h-4 w-4" />Edit with copilot</Link>
           <Link to={`/forge/new?analysis=${a.id}`} className="btn-accent btn-sm"><BookOpen className="h-4 w-4" />Fix gaps with CometForge</Link>
         </>} />
 

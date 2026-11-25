@@ -98,6 +98,10 @@ def sync(db: Session, org_id: str, student_id: str | None = None) -> int:
             have.add(key)
             n += 1
     db.flush()
+    if n:
+        from .stacks import check_completions
+
+        check_completions(db, org_id, {student_id} if student_id else None)
     return n
 
 
@@ -105,7 +109,7 @@ def out(b: SkillBadge, public: bool = False) -> dict:
     f, c = (b.basis or {}).get("faculty", {}), (b.basis or {}).get("completion", {})
     d = {"id": b.id, "skill": b.skill.name, "category": b.skill.category, "course_code": b.course_code,
          "course_title": b.course.title if b.course else None, "level": b.level, "term": b.term, "issued_at": b.issued_at,
-         "status": b.status, "basis": {"source": f.get("source"), "syllabus_semester": f.get("syllabus_semester"),
+         "status": b.status, "partner": b.partner, "basis": {"source": f.get("source"), "project": f.get("project"), "syllabus_semester": f.get("syllabus_semester"),
                                        "syllabus_version": f.get("syllabus_version"), "confirmed_at": f.get("confirmed_at")}}
     if not public:
         d |= {"public": b.public, "public_token": b.public_token, "revoked_reason": b.revoked_reason,

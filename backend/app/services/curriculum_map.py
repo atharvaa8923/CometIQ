@@ -56,10 +56,11 @@ def latest_syllabus_evidence(db: Session, org_id: str, course: Course) -> dict:
     return out
 
 
-def build(db: Session, program: Program, target: str = gapsvc.ALL, top_n: int = 20) -> dict:
+def build(db: Session, program: Program, target: str = gapsvc.ALL, top_n: int = 20,
+          demand: tuple[list[dict], int] | None = None) -> dict:
     org = program.org_id
     courses = program_courses(program)
-    demand, n_jobs = gapsvc.market_demand(db, target, org)
+    demand, n_jobs = demand if demand is not None else gapsvc.market_demand(db, target, org)
     market = {d["skill_id"]: d for d in demand[:top_n]}
     entries = list(db.scalars(select(CurriculumMapEntry).where(CurriculumMapEntry.program_id == program.id)))
     skill_ids = list(market) + [e.skill_id for e in entries if e.skill_id not in market]

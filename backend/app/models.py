@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    JSON, Boolean, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint, false,
+    JSON, Boolean, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint, false, true,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -337,6 +337,9 @@ class GapDecision(Base):
     detected_in_version: Mapped[int | None] = mapped_column(Integer)  # syllabus version whose mention signal suggests it was done
     implemented_note: Mapped[str | None] = mapped_column(Text)
     superseded_by: Mapped[str | None] = mapped_column(String(32))
+    # faculty may share an accepted addition with employer partners, who can then offer a project or dataset
+    share_with_partners: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    partner_note: Mapped[str | None] = mapped_column(Text)
 
     skill: Mapped[Skill] = relationship()
 
@@ -435,9 +438,71 @@ class SkillBadge(Base):
     public: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     public_token: Mapped[str] = mapped_column(String(40), unique=True)
     issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    partner: Mapped[str | None] = mapped_column(String(200))      # employer whose sponsored project the student completed
+    project_id: Mapped[str | None] = mapped_column(String(32))
 
     skill: Mapped[Skill] = relationship()
     course: Mapped[Course] = relationship()
+
+
+class SkillStack(Base):
+    """A role-ready credential: a set of skills, each at a minimum level, earned through faculty-verified badges."""
+    __tablename__ = "skill_stacks"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    role_family: Mapped[str | None] = mapped_column(String(80))
+    description: Mapped[str] = mapped_column(Text, default="")
+    requirements: Mapped[list] = mapped_column(JSON, default=list)   # [{"skill_id": int, "level": "practiced"|"mastered"}]
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class StackSubscription(Base):
+    __tablename__ = "stack_subscriptions"
+    __table_args__ = (UniqueConstraint("stack_id", "employer_id"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    stack_id: Mapped[str] = mapped_column(ForeignKey("skill_stacks.id", ondelete="CASCADE"), index=True)
+    employer_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class StackCompletion(Base):
+    __tablename__ = "stack_completions"
+    __table_args__ = (UniqueConstraint("stack_id", "student_id"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    stack_id: Mapped[str] = mapped_column(ForeignKey("skill_stacks.id", ondelete="CASCADE"), index=True)
+    student_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class SponsoredProject(Base):
+    """An employer's project, dataset or guest session offered for a gap faculty decided to add to a course."""
+    __tablename__ = "sponsored_projects"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    decision_id: Mapped[str | None] = mapped_column(ForeignKey("gap_decisions.id", ondelete="SET NULL"))
+    syllabus_id: Mapped[str] = mapped_column(ForeignKey("syllabi.id", ondelete="CASCADE"), index=True)
+    skill_id: Mapped[int] = mapped_column(ForeignKey("skills.id", ondelete="CASCADE"))
+    employer_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    company: Mapped[str] = mapped_column(String(200))
+    kind: Mapped[str] = mapped_column(String(20), default="project")   # project | dataset | guest_session
+    title: Mapped[str] = mapped_column(String(300))
+    description: Mapped[str] = mapped_column(Text)
+    dataset_url: Mapped[str | None] = mapped_column(String(1000))
+    deliverables: Mapped[list] = mapped_column(JSON, default=list)
+    term: Mapped[str | None] = mapped_column(String(40))
+    status: Mapped[str] = mapped_column(String(20), default="offered", index=True)  # offered|accepted|declined|completed|withdrawn
+    faculty_note: Mapped[str | None] = mapped_column(Text)
+    decided_by_name: Mapped[str | None] = mapped_column(String(200))
+    forge_draft_id: Mapped[str | None] = mapped_column(ForeignKey("forge_drafts.id", ondelete="SET NULL", name="fk_sponsored_forge_draft_id"))
+    participants: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    skill: Mapped[Skill] = relationship()
 
 
 # ── CometForge ─────────────────────────────────────────────────────────────────

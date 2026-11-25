@@ -6,6 +6,7 @@ import { CourseModal } from "../Catalog";
 import { api, download } from "../../lib/api";
 import { useApi } from "../../lib/hooks";
 import { useToast } from "../../lib/toast";
+import { StackProgress } from "../match/Stacks";
 
 interface Profile { program_id: string | null; concentration_id: string | null; career_goal: string | null; start_term: string; credits_per_term: number; include_summer: boolean }
 interface Slot { or_group: number; status: string; options: { id: string; code: string; title: string; status: string | null }[] }
@@ -83,7 +84,7 @@ export default function PathHome() {
   const prof = useApi<Profile & { career_goals: string[] }>("/path/profile");
   const ov = useApi<Overview>("/path/overview");
   const recs = useApi<{ eligible: Rec[]; blocked: Rec[]; career_goal: string | null }>("/path/recommendations");
-  const [tab, setTab] = useState<"plan" | "progress" | "recs" | "whatif" | "setup">("plan");
+  const [tab, setTab] = useState<"plan" | "progress" | "recs" | "stacks" | "whatif" | "setup">("plan");
   const review = useApi<Review | null>("/path/review");
   const savedPlan = useApi<{ term: string; credits: number; courses: { id: string; code: string; title: string; credits: number }[] }[]>("/path/saved");
   const [note, setNote] = useState("");
@@ -125,13 +126,14 @@ export default function PathHome() {
           <Stat label="Core requirements" value={`${p.core.done} / ${p.core.total}`} hint={`${p.core.planned} planned`} tone="flame" />
           <Stat label="Career readiness" value={o.readiness.goal ? `${Math.round(o.readiness.now)}% → ${Math.round(o.readiness.with_plan)}%` : "—"} hint={o.readiness.goal ?? "Set a goal"} tone="navy" />
         </div>)}
-      <Tabs value={tab} onChange={setTab} tabs={[{ id: "plan", label: "Semester plan" }, { id: "progress", label: "Degree progress" }, { id: "recs", label: "Recommended next" }, { id: "whatif", label: "What-if" }, { id: "setup", label: "Profile & goal" }]} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ id: "plan", label: "Semester plan" }, { id: "progress", label: "Degree progress" }, { id: "recs", label: "Recommended next" }, { id: "stacks", label: "Skill stacks" }, { id: "whatif", label: "What-if" }, { id: "setup", label: "Profile & goal" }]} />
 
       {p.program && <ReviewBanner r={review.data ?? null} hasPlan={p.sch.planned > 0} note={note} setNote={setNote} onSubmit={submitReview}
         onPdf={() => download("/path/plan.pdf", "CometPath-plan.pdf")} />}
 
       {tab === "whatif" && <WhatIf goals={prof.data.career_goals} onSwitch={() => { reloadAll(); setPlan(null); setTab("plan"); }} />}
 
+      {tab === "stacks" && <StackProgress />}
       {tab === "setup" && <Setup profile={prof.data} goals={prof.data.career_goals} onSaved={() => { reloadAll(); setPlan(null); setTab("plan"); }} />}
 
       {tab === "plan" && (!p.program ? <Empty icon={<GraduationCap className="h-8 w-8" />} title="Choose your program first" /> : (
