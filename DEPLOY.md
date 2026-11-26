@@ -3,6 +3,8 @@
 CometIQ is one container (API + web app) plus PostgreSQL. Uploaded certificates are stored in the
 database, so no persistent disk is needed.
 
+**Faculty pilot:** follow [docs/PILOT-DEPLOY.md](docs/PILOT-DEPLOY.md) (Render Blueprint `render.pilot.yaml`: two values to enter, readiness check and drills), then send [docs/UTD-IT-REQUEST.md](docs/UTD-IT-REQUEST.md) for NetID and Canvas.
+
 ## Option 1 — Render (recommended, ~15 minutes)
 
 1. **Push this project to GitHub** (private repo is fine).

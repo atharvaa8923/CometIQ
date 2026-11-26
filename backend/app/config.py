@@ -162,6 +162,14 @@ def _normalize_db_url(url: str) -> str:
 
 @lru_cache
 def get_settings() -> Settings:
+    import os
+
     s = Settings()
     s.DATABASE_URL = _normalize_db_url(s.DATABASE_URL)
+    # On Render, the service's public URL is known: use it unless APP_URL was set (e.g. a custom domain)
+    render_url = os.environ.get("RENDER_EXTERNAL_URL", "").rstrip("/")
+    if render_url and "APP_URL" not in os.environ:
+        s.APP_URL = render_url
+    if "CORS_ORIGINS" not in os.environ and not s.APP_URL.startswith("http://localhost"):
+        s.CORS_ORIGINS = s.APP_URL   # the frontend is served by the same app
     return s

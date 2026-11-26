@@ -67,7 +67,7 @@ signed-in users against a running server); results in [docs/performance/LOAD-TES
 
 ---
 
-**Deploying for real:** see [DEPLOY.md](DEPLOY.md) (Render blueprint included). Production mode (`SEED_DEMO=false`) creates no demo accounts.
+**Deploying for real:** see [DEPLOY.md](DEPLOY.md); the faculty pilot takes ~15 minutes with [docs/PILOT-DEPLOY.md](docs/PILOT-DEPLOY.md) (Render blueprint included). Production mode (`SEED_DEMO=false`) creates no demo accounts.
 
 **Faculty pilot:** [PILOT-PLAN.md](PILOT-PLAN.md) (program, syllabi, job sample, review protocol, measures), [PILOT-RUNBOOK.md](PILOT-RUNBOOK.md)
 (separate environment via `render.pilot.yaml`, demo removal, backup/restore and deletion drills), [PILOT-AGREEMENT.md](PILOT-AGREEMENT.md)

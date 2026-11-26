@@ -789,6 +789,14 @@ class CourseAssignment(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 
 
+class AppSecret(Base):
+    """Secrets the app creates for itself (the Open Badges signing key when none is configured), encrypted with SECRETS_KEY."""
+    __tablename__ = "app_secrets"
+    name: Mapped[str] = mapped_column(String(60), primary_key=True)
+    value: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class LtiNonce(Base):
     """Nonces of LTI launches already used (a launch token works once). Kept for a day."""
     __tablename__ = "lti_nonces"

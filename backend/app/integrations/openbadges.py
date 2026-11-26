@@ -44,11 +44,10 @@ def _load_pem() -> bytes:
     if s.OB_SIGNING_KEY_FILE:
         return Path(s.OB_SIGNING_KEY_FILE).read_bytes()
     if s.ENV == "production":
-        raise Unavailable("Set OB_SIGNING_KEY or OB_SIGNING_KEY_FILE to issue Open Badges")
+        return _stored_key()
     if not KEY_FILE.exists():   # development: create a key once (exclusive create, safe with several workers)
         KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
-        pem = rsa.generate_private_key(public_exponent=65537, key_size=2048).private_bytes(
-            serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+        pem = _new_pem()
         try:
             fd = os.open(KEY_FILE, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(fd, "wb") as f:
@@ -56,6 +55,35 @@ def _load_pem() -> bytes:
         except FileExistsError:
             pass
     return KEY_FILE.read_bytes()
+
+
+def _new_pem() -> bytes:
+    return rsa.generate_private_key(public_exponent=65537, key_size=3072).private_bytes(
+        serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+
+
+def _stored_key() -> bytes:
+    """Production without a configured key: create one once, keep it in the database encrypted with SECRETS_KEY.
+    It is part of every database backup, so a restored copy keeps verifying the badges it issued."""
+    from sqlalchemy.exc import IntegrityError
+
+    from ..db import SessionLocal
+    from ..models import AppSecret
+    from .secrets import decrypt, encrypt
+
+    with SessionLocal() as db:
+        row = db.get(AppSecret, "ob_signing_key")
+        if row is None:
+            db.add(AppSecret(name="ob_signing_key", value=encrypt(_new_pem().decode())))
+            try:
+                db.commit()
+            except IntegrityError:   # another instance created it first
+                db.rollback()
+            row = db.get(AppSecret, "ob_signing_key")
+        pem = decrypt(row.value)
+    if not pem:
+        raise Unavailable("The stored Open Badges key can't be decrypted: SECRETS_KEY changed. Restore it or set OB_SIGNING_KEY.")
+    return pem.encode()
 
 
 @lru_cache(maxsize=1)
@@ -182,6 +210,7 @@ def status() -> dict:
     try:
         return {"enabled": True, "kid": public_jwk()["kid"],
                 "source": "OB_SIGNING_KEY" if get_settings().OB_SIGNING_KEY.strip() else
-                          "OB_SIGNING_KEY_FILE" if get_settings().OB_SIGNING_KEY_FILE else "development key (backend/.keys)"}
+                          "OB_SIGNING_KEY_FILE" if get_settings().OB_SIGNING_KEY_FILE else
+                          "generated, stored encrypted in the database" if get_settings().ENV == "production" else "development key (backend/.keys)"}
     except Unavailable as e:
         return {"enabled": False, "detail": str(e)}

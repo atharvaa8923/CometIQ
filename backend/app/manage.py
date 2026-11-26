@@ -5,6 +5,8 @@
                                                     prove a deleted person leaves no rows behind (exit 1 if traces remain)
   python -m app.manage retention [--dry-run]         apply the data-retention rules now (they also run daily)
   python -m app.manage restore-check [--json]       migration revision + row counts (compare a restored copy with the source)
+  python -m app.manage deletion-drill               create a throwaway person with data, delete them, prove nothing is left
+  python -m app.manage pilot-check                  production settings, signing key, admin account, migrations
 """
 import argparse
 import json
@@ -100,6 +102,78 @@ def restore_check(as_json: bool) -> int:
     return 1 if out["missing_tables"] or not out["tables"] else 0
 
 
+def deletion_drill() -> int:
+    """Safe on a live database: touches only the throwaway account it creates."""
+    import secrets as _s
+
+    from .models import AuditLog, Notification, Organization, PasswordReset, StudentCourse, Syllabus, User
+    from .routers.privacy import erase
+    from .security import hash_password
+
+    tag = _s.token_hex(4)
+    email, name = f"deletion-drill-{tag}@drill.invalid", f"Drill Person {tag}"
+    with SessionLocal() as db:
+        org = db.scalar(select(Organization).order_by(Organization.created_at))
+        u = User(org_id=org.id, email=email, full_name=name, role="faculty", password_hash=hash_password(_s.token_urlsafe(16)))
+        db.add(u)
+        db.flush()
+        uid = u.id
+        db.add_all([AuditLog(org_id=org.id, user_id=uid, action="drill", detail={"who": name, "email": email}),
+                    Notification(user_id=uid, kind="drill", title=f"Hello {name}", body=email),
+                    PasswordReset(user_id=uid, token_hash=_s.token_hex(32), expires_at=func.now()),
+                    Syllabus(org_id=org.id, owner_id=uid, title=f"Drill syllabus {tag}", raw_text=f"Prepared by {name} ({email})")])
+        db.commit()
+        print(f"[PASS] created {email} with an audit entry, a notification, a password reset and a syllabus")
+        erase(db, db.get(User, uid))
+        db.commit()
+        print("[PASS] deleted through the same path as 'Delete my account'")
+        left = db.scalar(select(func.count()).select_from(StudentCourse).where(StudentCourse.user_id == uid))
+    code = verify_erasure(uid, email, name)
+    print("[PASS] no trace left" if code == 0 and not left else "[FAIL] traces remain")
+    return code
+
+
+def pilot_check() -> int:
+    """Is this deployment ready for faculty? Prints each check; exit 1 if any required one fails."""
+    from alembic.runtime.migration import MigrationContext
+    from alembic.script import ScriptDirectory
+
+    from .config import get_settings
+    from .integrations import openbadges
+    from .migrate import alembic_config
+    from .models import User
+
+    s = get_settings()
+    checks = []
+
+    def check(ok: bool, msg: str, required: bool = True):
+        checks.append((ok or not required, f"[{'PASS' if ok else ('FAIL' if required else 'NOTE')}] {msg}"))
+
+    check(s.ENV == "production", f"ENV is {s.ENV}")
+    check(not s.SEED_DEMO, "no demo accounts or fictional postings (SEED_DEMO=false)")
+    check(len(s.JWT_SECRET) >= 32 and s.JWT_SECRET != "change-me-in-production", "JWT_SECRET is strong")
+    check(len(s.SECRETS_KEY) >= 32, "SECRETS_KEY is set (encrypts stored tokens and the badge key)")
+    check(s.APP_URL.startswith("https://"), f"APP_URL is {s.APP_URL}")
+    check(bool(s.allowed_roles()), f"pilot roles: {', '.join(sorted(s.allowed_roles() or [])) or 'everyone'}", required=False)
+    with engine.connect() as conn:
+        rev = MigrationContext.configure(conn).get_current_revision()
+    head = ScriptDirectory.from_config(alembic_config()).get_current_head()
+    check(rev == head, f"database at migration {rev} (latest {head})")
+    with SessionLocal() as db:
+        admins = db.scalar(select(func.count()).select_from(User).where(User.role == "admin", User.is_active))
+        demo = db.scalar(select(func.count()).select_from(User).where(User.email.like("%@cometiq.app")))
+    check(admins >= 1, f"{admins} active administrator(s)")
+    check(demo == 0, f"{demo} demo accounts")
+    ob = openbadges.status()
+    check(ob["enabled"], f"Open Badges signing: {ob.get('source') or ob.get('detail')}")
+    check(s.EMAIL_PROVIDER != "log", f"email provider: {s.EMAIL_PROVIDER} (password resets need a real one)", required=False)
+    for _, line in checks:
+        print(line)
+    ok = all(c[0] for c in checks)
+    print("READY for faculty" if ok else "NOT READY: fix the FAIL lines")
+    return 0 if ok else 1
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="python -m app.manage")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -113,7 +187,13 @@ def main(argv=None) -> int:
     rt.add_argument("--dry-run", action="store_true")
     c = sub.add_parser("restore-check")
     c.add_argument("--json", action="store_true")
+    sub.add_parser("deletion-drill")
+    sub.add_parser("pilot-check")
     a = ap.parse_args(argv)
+    if a.cmd == "deletion-drill":
+        return deletion_drill()
+    if a.cmd == "pilot-check":
+        return pilot_check()
     if a.cmd == "remove-demo-data":
         return remove_demo_data(a.yes)
     if a.cmd == "verify-erasure":

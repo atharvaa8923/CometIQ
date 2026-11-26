@@ -1,9 +1,12 @@
-# Render Blueprint — SEPARATE faculty-only pilot environment for CometIQ.
-# It has its own database, secret and URL, and shares nothing with the demo or a future production deployment.
-# Render dashboard → New → Blueprint → choose this repository and this file (render.pilot.yaml).
+# Render Blueprint: SEPARATE faculty-only pilot environment for CometIQ (docs/PILOT-DEPLOY.md).
+# It has its own database, secrets and URL, and shares nothing with the demo or a future production deployment.
+# Render dashboard → New → Blueprint → this repository → Blueprint path: render.pilot.yaml.
+# The form asks for two values only: the pilot administrator's email and password. Everything else is generated
+# or derived (the public URL comes from Render; the Open Badges signing key is created on first use and stored
+# encrypted in the database). Integrations and email are added later under the service's Environment tab.
 databases:
   - name: cometiq-pilot-db
-    plan: basic-256mb              # paid plan: Render takes daily backups with point-in-time recovery (free databases have none)
+    plan: basic-256mb              # paid: daily backups with point-in-time recovery (the restore drill needs them)
     databaseName: cometiq_pilot
     user: cometiq_pilot
 
@@ -12,6 +15,7 @@ services:
     name: cometiq-pilot
     runtime: docker
     plan: starter
+    branch: main
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/health
     autoDeploy: false              # the pilot only changes when someone deploys a reviewed release on purpose
@@ -22,17 +26,8 @@ services:
         fromDatabase: { name: cometiq-pilot-db, property: connectionString }
       - key: JWT_SECRET
         generateValue: true
-      - key: SECRETS_KEY              # encrypts stored Canvas tokens; keep it stable
+      - key: SECRETS_KEY              # encrypts stored Canvas tokens and the badge signing key; never change it
         generateValue: true
-      # Institution integrations (docs/INTEGRATIONS.md); each stays off until configured
-      - key: SSO_CLIENT_SECRET
-        sync: false
-      - key: CANVAS_CLIENT_SECRET
-        sync: false
-      - key: CREDENTIALS_TOKEN
-        sync: false
-      - key: OB_SIGNING_KEY           # RSA private key (PEM) that signs Open Badges
-        sync: false
       - key: SEED_DEMO
         value: "false"             # no demo accounts, no fictional postings
       - key: PILOT_ROLES
@@ -42,34 +37,14 @@ services:
       - key: BOOTSTRAP_ADMIN_EMAIL
         sync: false                # the pilot administrator's UTD address
       - key: BOOTSTRAP_ADMIN_PASSWORD
-        sync: false
-      - key: APP_URL
-        sync: false
-      - key: CORS_ORIGINS
-        sync: false
+        sync: false                # 12+ characters; change it after the first sign-in
+      - key: WEB_CONCURRENCY
+        value: "1"                 # one worker fits the Starter plan's memory; raise it with a larger plan
       - key: JOB_SYNC_ENABLED
         value: "false"             # the pilot uses documented, frozen job samples; sync only on purpose
-      - key: ADZUNA_APP_ID
-        sync: false
-      - key: ADZUNA_APP_KEY
-        sync: false
-      - key: USAJOBS_API_KEY
-        sync: false
-      - key: USAJOBS_EMAIL
-        sync: false
-      - key: NEBULA_API_KEY
-        sync: false
-      - key: ANTHROPIC_API_KEY
-        sync: false                # optional; leave empty to keep extraction fully deterministic for the pilot
       - key: AI_DAILY_LIMIT_PER_ORG
         value: "200"
       - key: EMAIL_PROVIDER
-        value: resend
-      - key: RESEND_API_KEY
-        sync: false
-      - key: EMAIL_FROM
-        sync: false
-      - key: SENTRY_DSN
-        sync: false
+        value: log                 # switch to resend (with RESEND_API_KEY and EMAIL_FROM) to send password-reset emails
       - key: LOG_FORMAT
         value: json
