@@ -77,13 +77,17 @@ export function AccountSettings() {
           <div className="text-sm"><div className="font-semibold text-slate-800">{user.full_name}</div><div className="text-slate-500">{user.email}</div></div>
           <label className="flex items-center justify-between gap-3 text-sm"><span>Email me about verifications, plan reviews and applications</span>
             <input type="checkbox" className="h-4 w-4 accent-comet-600" checked={notifs} onChange={(e) => saveNotifs(e.target.checked)} /></label>
-          <form onSubmit={changePw} className="space-y-3 border-t border-slate-100 pt-4">
+{user.sso
+            ? <p className="border-t border-slate-100 pt-4 text-sm text-slate-600">You sign in with your institution's single sign-on, so your password is managed there.</p>
+            : (<>
+            <form onSubmit={changePw} className="space-y-3 border-t border-slate-100 pt-4">
             <div className="text-sm font-semibold text-slate-700">Change password</div>
             <ErrorBox error={err} />
             <Field label="Current password"><input className="input" type="password" required autoComplete="current-password" value={cur} onChange={(e) => setCur(e.target.value)} /></Field>
             <Field label="New password" hint="At least 8 characters"><input className="input" type="password" minLength={8} required autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} /></Field>
             <button className="btn-primary btn-sm">Change password</button>
           </form>
+            </>)}
           <div className="space-y-3 border-t border-slate-100 pt-4">
             <div className="text-sm font-semibold text-slate-700">Your data</div>
             <p className="text-xs text-slate-500">See what CometIQ stores in the <Link to="/privacy" className="text-comet-700 underline" onClick={() => setOpen(false)}>Privacy Notice</Link>.</p>
@@ -93,7 +97,7 @@ export function AccountSettings() {
               <form onSubmit={deleteAccount} className="mt-3 space-y-2">
                 <p className="text-xs text-slate-600">This permanently deletes your account and personal data (plans, submissions, applications). It cannot be undone.</p>
                 <ErrorBox error={delErr} />
-                <Field label="Password"><input className="input" type="password" required autoComplete="current-password" value={delPw} onChange={(e) => setDelPw(e.target.value)} /></Field>
+                {!user.sso && <Field label="Password"><input className="input" type="password" required autoComplete="current-password" value={delPw} onChange={(e) => setDelPw(e.target.value)} /></Field>}
                 <Field label='Type DELETE to confirm'><input className="input" required value={delConfirm} onChange={(e) => setDelConfirm(e.target.value)} /></Field>
                 <button className="btn btn-sm bg-red-600 text-white hover:bg-red-700" disabled={delConfirm.trim().toUpperCase() !== "DELETE"}><Trash2 className="h-4 w-4" />Permanently delete</button>
               </form>

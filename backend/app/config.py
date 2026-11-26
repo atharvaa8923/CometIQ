@@ -73,7 +73,83 @@ class Settings(BaseSettings):
     ORG_JOIN_CODE: str = ""
     BOOTSTRAP_ADMIN_EMAIL: str = ""
     BOOTSTRAP_ADMIN_PASSWORD: str = ""
-    LOGIN_RATE_LIMIT: int = 10   # failed logins per email+IP per 15 minutes
+    LOGIN_RATE_LIMIT: int = 10
+    # Pilot: comma-separated roles allowed to register/sign in (e.g. "admin,faculty"). Empty = all roles.
+    PILOT_ROLES: str = ""
+    # Database pool and timeouts (PostgreSQL); SQLite uses DB_LOCK_TIMEOUT_MS as its busy timeout
+    DB_POOL_SIZE: int = 8          # per worker process: workers × (pool + overflow) must stay below max_connections (100)
+    DB_MAX_OVERFLOW: int = 12
+    DB_POOL_TIMEOUT_S: int = 10
+    DB_POOL_RECYCLE_S: int = 1800
+    DB_STATEMENT_TIMEOUT_MS: int = 15000
+    DB_LOCK_TIMEOUT_MS: int = 5000
+    DB_IDLE_TX_TIMEOUT_MS: int = 60000
+    # Data retention (daily; 0 = keep forever)
+    CACHE_ENABLED: bool = True
+    CACHE_TTL_S: int = 600
+    RATE_LIMITS_ENABLED: bool = True
+    RATE_LIMIT_MULTIPLIER: float = 1.0   # scale every per-minute limit (e.g. 3 for a busy pilot, 0.1 to test)
+    RETENTION_IDEMPOTENCY_HOURS: int = 24
+    RETENTION_ENABLED: bool = True
+    RETENTION_TASKS_DAYS: int = 30            # finished background jobs (their payloads can hold email addresses)
+    RETENTION_NOTIFICATIONS_DAYS: int = 180   # read notifications; unread ones after twice this
+    RETENTION_AI_USAGE_DAYS: int = 90
+    RETENTION_AUDIT_DAYS: int = 0             # the audit trail is kept unless the institution sets a period
+    RETENTION_SYNC_RUNS_DAYS: int = 180
+    RETENTION_CLOSED_JOBS_DAYS: int = 365     # closed synced postings without applications and outside documented samples
+    RETENTION_UNUSED_SNAPSHOTS_DAYS: int = 30
+    # ── Integrations (all optional; each is off until configured) ──
+    # Secrets saved in the database (Canvas tokens) are encrypted with this key. Production: set it (32+ random chars)
+    # and keep it stable; development derives one from JWT_SECRET.
+    SECRETS_KEY: str = ""
+    # Single sign-on (OpenID Connect): Microsoft Entra ID, or a Shibboleth IdP with the OIDC plugin
+    SSO_ENABLED: bool = False
+    SSO_PROVIDER_NAME: str = "UTD NetID"
+    SSO_ISSUER: str = ""               # e.g. https://login.microsoftonline.com/<tenant-id>/v2.0
+    SSO_CLIENT_ID: str = ""
+    SSO_CLIENT_SECRET: str = ""
+    SSO_SCOPES: str = "openid profile email"
+    SSO_ALLOWED_DOMAINS: str = "utdallas.edu"       # only these email domains may sign in with SSO
+    SSO_NETID_CLAIM: str = "preferred_username"     # NetID = this claim without "@domain"
+    SSO_ROLE_CLAIM: str = "roles"                   # claim with affiliations / app roles / groups (string or list)
+    SSO_ROLE_MAP: str = "faculty:faculty,staff:advisor,advisor:advisor,student:student"   # claim value → CometIQ role (never admin)
+    SSO_DEFAULT_ROLE: str = "student"               # when no mapped value is present
+    SSO_AUTO_PROVISION: bool = True                 # create accounts on first sign-in
+    SSO_REQUIRED: bool = False                      # institutional emails must use SSO (password sign-in refused)
+    SSO_ORG_SLUG: str = ""                          # organization new SSO users join (default: the first one)
+    # Canvas LMS (a Canvas developer key; redirect URI = APP_URL/api/canvas/callback)
+    CANVAS_BASE_URL: str = ""          # e.g. https://<school>.instructure.com
+    CANVAS_CLIENT_ID: str = ""
+    CANVAS_CLIENT_SECRET: str = ""
+    CANVAS_SCOPES: str = ""            # only if the developer key enforces scopes (space-separated, see docs/INTEGRATIONS.md)
+    # CometIQ inside Canvas (LTI 1.3). Canvas cloud defaults; the client id is the LTI developer key's id.
+    LTI_ENABLED: bool = False
+    LTI_CLIENT_ID: str = ""
+    LTI_ISSUER: str = "https://canvas.instructure.com"
+    LTI_AUTH_URL: str = "https://sso.canvaslms.com/api/lti/authorize_redirect"
+    LTI_JWKS_URL: str = "https://sso.canvaslms.com/api/lti/security/jwks"
+    LTI_DEPLOYMENT_IDS: str = ""        # comma-separated; empty = any deployment of this developer key
+    LTI_AUTO_PROVISION: bool = True
+    LTI_FRAME_ANCESTORS: str = "https://*.instructure.com"   # who may show CometIQ's in-Canvas pages in a frame
+    # Canvas Credentials (Badgr) for sending verified badges back into Canvas
+    CREDENTIALS_BASE_URL: str = "https://api.badgr.io"
+    CREDENTIALS_TOKEN: str = ""
+    CREDENTIALS_ISSUER_ID: str = ""
+    CREDENTIALS_AUTO_SEND: bool = False   # send new badges automatically (otherwise an admin sends them)
+    # Open Badges 3.0 signing key (RSA private key, PEM). Development generates one in backend/.keys/.
+    OB_SIGNING_KEY: str = ""
+    OB_SIGNING_KEY_FILE: str = ""
+    LINKEDIN_ORG_ID: str = ""          # the institution's LinkedIn organization id (optional, links the issuer)
+    # Handshake: import a jobs export (CSV/XLSX) or pull one from a URL nightly
+    HANDSHAKE_FEED_URL: str = ""       # optional URL serving the export (CSV or JSON)
+    HANDSHAKE_FEED_TOKEN: str = ""     # optional bearer token for that URL
+    HANDSHAKE_JOB_URL: str = "https://app.joinhandshake.com/jobs/{id}"   # link to a posting by its Handshake id
+    CURRICULUM_APPROVALS: int = 2       # approvals a curriculum proposal needs (author excluded)
+    OUTCOME_MIN_COHORT: int = 10        # smallest student group shown in outcome comparisons
+
+    def allowed_roles(self) -> set[str] | None:
+        roles = {r.strip() for r in self.PILOT_ROLES.split(",") if r.strip()}
+        return roles or None   # failed logins per email+IP per 15 minutes
 
 
 def _normalize_db_url(url: str) -> str:
@@ -86,6 +162,14 @@ def _normalize_db_url(url: str) -> str:
 
 @lru_cache
 def get_settings() -> Settings:
+    import os
+
     s = Settings()
     s.DATABASE_URL = _normalize_db_url(s.DATABASE_URL)
+    # On Render, the service's public URL is known: use it unless APP_URL was set (e.g. a custom domain)
+    render_url = os.environ.get("RENDER_EXTERNAL_URL", "").rstrip("/")
+    if render_url and "APP_URL" not in os.environ:
+        s.APP_URL = render_url
+    if "CORS_ORIGINS" not in os.environ and not s.APP_URL.startswith("http://localhost"):
+        s.CORS_ORIGINS = s.APP_URL   # the frontend is served by the same app
     return s

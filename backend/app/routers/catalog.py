@@ -1,12 +1,13 @@
 """Shared knowledge graph: programs, courses, prerequisites, skills, meta."""
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ..data.taxonomy import CATEGORIES, ROLE_FAMILIES
 from ..db import get_db
 from ..models import Course, CoursePrereq, Job, JobSkill, Program, Skill, User
-from ..security import current_user
+from ..security import current_user, require_roles
 from ..services import ai, nebula
 
 router = APIRouter(prefix="/api", tags=["catalog"])
@@ -44,7 +45,8 @@ def program(pid: str, user: User = Depends(current_user), db: Session = Depends(
         raise HTTPException(404, "Program not found")
     return {"id": p.id, "name": p.name, "type": p.type, "department": p.department, "total_sch": p.total_sch,
             "core_sch": p.core_sch, "elective_sch": p.elective_sch, "is_stem": p.is_stem, "catalog_url": p.catalog_url,
-            "prereq_notes": p.prereq_notes,
+            "prereq_notes": p.prereq_notes, "catalog_year": p.catalog_year, "catalog_confirmed_by": p.catalog_confirmed_by,
+            "catalog_confirmed_at": p.catalog_confirmed_at, "catalog_note": p.catalog_note,
             "core": [{**course_brief(pc.course), "or_group": pc.or_group} for pc in p.core],
             "concentrations": [{"id": c.id, "name": c.name, "required_sch": c.required_sch, "notes": c.notes,
                                 "courses": [course_brief(cc.course) for cc in c.courses]} for c in p.concentrations]}
@@ -84,3 +86,26 @@ def course_live(cid: str, user: User = Depends(current_user), db: Session = Depe
     if not c or c.org_id != user.org_id:
         raise HTTPException(404, "Course not found")
     return {"course": c.code, **nebula.course_live(c.subject, c.code.split()[-1])}
+
+
+class CatalogConfirmIn(BaseModel):
+    catalog_year: str = Field(pattern=r"^20\d\d-\d\d$")
+    confirmed_by: str = Field(min_length=3, max_length=200)   # program owner's name/role
+    note: str | None = Field(None, max_length=2000)
+
+
+@router.put("/programs/{pid}/catalog-confirmation")
+def confirm_catalog(pid: str, body: CatalogConfirmIn, user: User = Depends(require_roles("admin")), db: Session = Depends(get_db)):
+    """Record that the program owner confirmed which catalog year the requirements follow."""
+    from datetime import datetime, timezone
+
+    from ..security import audit
+
+    p = db.get(Program, pid)
+    if not p or p.org_id != user.org_id:
+        raise HTTPException(404, "Program not found")
+    p.catalog_year, p.catalog_confirmed_by, p.catalog_note = body.catalog_year, body.confirmed_by.strip(), body.note
+    p.catalog_confirmed_at = datetime.now(timezone.utc)
+    audit(db, user, "program.catalog_confirmed", program=p.name, year=body.catalog_year, by=body.confirmed_by)
+    db.commit()
+    return {"catalog_year": p.catalog_year, "catalog_confirmed_by": p.catalog_confirmed_by, "catalog_confirmed_at": p.catalog_confirmed_at}

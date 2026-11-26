@@ -1,5 +1,7 @@
 import { BriefcaseBusiness, ExternalLink, FileUp, Lightbulb, Loader2, Plus, Send, TrendingUp } from "lucide-react";
 import { Link } from "react-router-dom";
+import Badges from "./Badges";
+import { StackProgress } from "./Stacks";
 import EvidencePortal from "./EvidencePortal";
 import { useState } from "react";
 import { Badge, Card, Empty, Modal, PageHeader, Spinner, Tabs } from "../../components/ui";
@@ -21,7 +23,7 @@ const STATUS_COLOR: Record<string, string> = { applied: "blue", shortlisted: "pu
 
 export default function StudentMatch() {
   const toast = useToast();
-  const [tab, setTab] = useState<"jobs" | "evidence" | "learn" | "profile" | "apps">("jobs");
+  const [tab, setTab] = useState<"jobs" | "evidence" | "badges" | "stacks" | "learn" | "profile" | "apps">("jobs");
   const learn = useApi<{ career_goal: string | null; skills: LearnSkill[] }>(tab === "learn" ? "/match/learn-next" : null);
   const [tips, setTips] = useState<Tips | null>(null);
   const [tipsBusy, setTipsBusy] = useState(false);
@@ -61,7 +63,7 @@ export default function StudentMatch() {
       <PageHeader icon={<BriefcaseBusiness className="h-5 w-5" />} accent="navy" title="CometMatch" subtitle="Student–Employer Talent Matching"
         actions={<label className="btn-primary cursor-pointer"><FileUp className="h-4 w-4" />{uploading ? "Analyzing…" : me.data?.resume_filename ? "Update resume" : "Upload resume"}
           <input type="file" accept=".pdf,.docx,.txt" className="hidden" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} /></label>} />
-      <Tabs value={tab} onChange={setTab} tabs={[{ id: "jobs", label: "Best-fit jobs" }, { id: "evidence", label: "Courses & certifications" }, { id: "learn", label: "Skills to learn next" }, { id: "profile", label: "Skill profile & resume tips" }, { id: "apps", label: `Applications${apps.data?.length ? ` (${apps.data.length})` : ""}` }]} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ id: "jobs", label: "Best-fit jobs" }, { id: "evidence", label: "Courses & certifications" }, { id: "badges", label: "Verified skill badges" }, { id: "stacks", label: "Skill stacks" }, { id: "learn", label: "Skills to learn next" }, { id: "profile", label: "Skill profile & resume tips" }, { id: "apps", label: `Applications${apps.data?.length ? ` (${apps.data.length})` : ""}` }]} />
 
       {tab === "jobs" && (
         <Card padded={false} title={<div className="flex flex-wrap items-center gap-3">
@@ -89,6 +91,8 @@ export default function StudentMatch() {
             </ul>)}
         </Card>)}
 
+      {tab === "badges" && <Badges />}
+      {tab === "stacks" && <StackProgress />}
       {tab === "evidence" && <EvidencePortal onChange={() => { me.reload(); jobs.reload(); }} />}
 
       {tab === "learn" && (

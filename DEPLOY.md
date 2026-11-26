@@ -3,6 +3,8 @@
 CometIQ is one container (API + web app) plus PostgreSQL. Uploaded certificates are stored in the
 database, so no persistent disk is needed.
 
+**Faculty pilot:** follow [docs/PILOT-DEPLOY.md](docs/PILOT-DEPLOY.md) (Render Blueprint `render.pilot.yaml`: two values to enter, readiness check and drills), then send [docs/UTD-IT-REQUEST.md](docs/UTD-IT-REQUEST.md) for NetID and Canvas.
+
 ## Option 1 — Render (recommended, ~15 minutes)
 
 1. **Push this project to GitHub** (private repo is fine).
@@ -69,6 +71,17 @@ backup restore test and pilot setup.
   Unhandled errors and browser errors go to Sentry when `SENTRY_DSN` is set.
 - **Background jobs:** AI analysis, syllabus generation, catalog/syllabus imports and emails run in a database-backed queue
   (`TASK_WORKERS` threads per instance; jobs survive restarts and are claimed once across instances).
+- **University integrations:** single sign-on, Canvas, Canvas Credentials, Open Badges signing and Handshake are set up
+  with environment variables; follow [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md). In production set `SECRETS_KEY`
+  (encrypts Canvas tokens; the Render blueprint generates one) and `OB_SIGNING_KEY` (signs Open Badges).
+- **Scaling:** set `WEB_CONCURRENCY` (uvicorn worker processes, about one per CPU core; the image defaults to 2). Each
+  process opens up to `DB_POOL_SIZE + DB_MAX_OVERFLOW` (8 + 12) database connections: keep the total below PostgreSQL's
+  `max_connections`. Caches and rate-limit counters are per process; cached views are invalidated across all of them.
+  Measured capacity: [docs/performance/LOAD-TEST.md](docs/performance/LOAD-TEST.md).
+- **Rate limits:** expensive endpoints (AI, simulator, rankings, exports) have per-user budgets per minute and return 429
+  with `Retry-After`; tune with `RATE_LIMIT_MULTIPLIER` or turn off with `RATE_LIMITS_ENABLED=false`.
+- **Retention:** a daily job removes finished tasks, read notifications, expired password resets, idempotency keys and
+  other operational data (`RETENTION_*` settings; `python -m app.manage retention --dry-run` shows what it would delete).
 - **Upgrades:** push to GitHub → auto-deploy. Database migrations (Alembic) run automatically at start, one instance at a
   time (PostgreSQL advisory lock).
 - **Security:** bcrypt passwords, JWT (24 h), role-based access on every endpoint, per-organization data isolation,

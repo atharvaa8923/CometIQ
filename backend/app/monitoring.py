@@ -74,9 +74,9 @@ async def request_id_middleware(request, call_next):
             import sentry_sdk
 
             sentry_sdk.capture_exception()
-        from fastapi.responses import JSONResponse
+        from .errors import respond
 
-        response = JSONResponse({"detail": "Something went wrong on our side. Please try again.", "request_id": rid}, status_code=500)
+        response = respond(500, "Something went wrong on our side. Please try again.")
     finally:
         request_id.reset(token)
     ms = (time.perf_counter() - start) * 1000
@@ -109,11 +109,16 @@ def readiness() -> tuple[bool, dict]:
                 "running": db.scalar(select(func.count()).select_from(Task).where(Task.status == "running")) or 0,
                 "failed_24h": db.scalar(select(func.count()).select_from(Task).where(Task.status == "failed", Task.created_at >= day)) or 0,
             }
+            from .models import User
+
+            checks["demo_accounts"] = db.scalar(select(func.count()).select_from(User).where(User.email.like("%@cometiq.app"))) or 0
             last = db.scalar(select(SyncRun).order_by(SyncRun.id.desc()).limit(1))
             checks["last_job_sync"] = {"status": last.status, "at": last.started_at.isoformat()} if last else None
     except Exception as e:
         ok = False
         checks["database"] = f"error: {type(e).__name__}"
+    roles = get_settings().allowed_roles()
+    checks["pilot_roles"] = sorted(roles) if roles else None
     checks["integrations"] = {"claude": ai.enabled(), "nebula": nebula.enabled(), "email": email.enabled(),
                               "sentry": bool(get_settings().SENTRY_DSN)}
     return ok, checks

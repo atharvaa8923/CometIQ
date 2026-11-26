@@ -14,10 +14,17 @@ export class ApiError extends Error {
   }
 }
 
+function newKey(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = {};
   const token = tokenStore.get();
   if (token) headers.Authorization = `Bearer ${token}`;
+  // one key per submission: if the request is retried or double-submitted, the server returns the first result
+  if (method !== "GET") headers["Idempotency-Key"] = newKey();
   let payload: BodyInit | undefined;
   if (body instanceof FormData) payload = body;
   else if (body !== undefined) {
@@ -35,6 +42,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
       const j = await res.json();
       msg = typeof j.detail === "string" ? j.detail : Array.isArray(j.detail) ? j.detail.map((d: { msg: string }) => d.msg).join("; ") : msg;
       if (res.status >= 500 && j.request_id) msg += ` (reference ${j.request_id})`;
+      if (res.status === 409 && j.error?.code === "in_progress") msg = "Still saving your previous request. Wait a moment, then refresh.";
     } catch { /* not json */ }
     throw new ApiError(res.status, msg);
   }

@@ -67,20 +67,15 @@ async def upload_resume(file: UploadFile = File(...), user: User = Depends(stude
 def my_matches(role_family: str = "", employment_type: str = "", q: str = "", posted_only: bool = False, limit: int = 40,
                user: User = Depends(student), db: Session = Depends(get_db)):
     skills, bonuses = matchsvc.student_profile(db, user.id)
-    stmt = _visible_jobs(user)
-    if role_family:
-        stmt = stmt.where(Job.role_family == role_family)
-    if employment_type:
-        stmt = stmt.where(Job.employment_type == employment_type)
-    if q:
-        stmt = stmt.where(Job.title.ilike(f"%{q}%") | Job.company.ilike(f"%{q}%"))
-    if posted_only:
-        stmt = stmt.where(Job.employer_id.is_not(None))
+    ql = q.lower()
     applied = dict(db.execute(select(Application.job_id, Application.status).where(Application.student_id == user.id)).all())
     out = []
-    for j in db.scalars(stmt):
+    for j in matchsvc.open_jobs(db, user.org_id):   # cached, read-only
+        if (role_family and j.role_family != role_family) or (employment_type and j.employment_type != employment_type) \
+                or (posted_only and j.employer_id is None) or (ql and ql not in j.title.lower() and ql not in (j.company or "").lower()):
+            continue
         m = matchsvc.score_job(j, skills, bonuses=bonuses)
-        out.append({**job_out(j), "score": m["score"], "bonus": m["bonus"], "label": m["label"], "summary": m["summary"],
+        out.append({**j.out, "score": m["score"], "bonus": m["bonus"], "label": m["label"], "summary": m["summary"],
                     "matched": [x["skill"] for x in m["matched"]][:5], "missing": [x["skill"] for x in m["missing"] if x["importance"] == "required"][:4],
                     "can_apply": j.employer_id is not None, "application": applied.get(j.id)})
     out.sort(key=lambda x: (-x["score"], x["title"]))
@@ -197,18 +192,25 @@ def update_job(jid: str, body: PostIn, user: User = Depends(employer), db: Sessi
 
 
 @router.get("/employer/jobs/{jid}/candidates")
-def candidates(jid: str, min_score: float = 0, user: User = Depends(employer), db: Session = Depends(get_db)):
+def candidates(jid: str, min_score: float = 0, limit: int = 100, user: User = Depends(employer), db: Session = Depends(get_db)):
+    from ..services.cache import cached
+
     j = _own_job(db, user, jid)
+    return cached(db, user.org_id, ("candidates", jid, min_score, limit), lambda: _candidates(j, min_score, limit, user, db))
+
+
+def _candidates(j, min_score: float, limit: int, user: User, db: Session):
     apps = {a.student_id: a for a in db.scalars(select(Application).where(Application.job_id == j.id))}
     rows = db.execute(select(User, StudentProfile).join(StudentProfile, StudentProfile.user_id == User.id)
                       .where(User.org_id == user.org_id, User.role == "student", User.is_active)).all()
     progs = {p.id: p.name for p in db.scalars(select(Program).where(Program.org_id == user.org_id))}
     concs = {c.id: c.name for c in db.scalars(select(Concentration))}
     out = []
+    rows = [(u, prof) for u, prof in rows if prof.open_to_match or u.id in apps]
+    all_sk = matchsvc.students_skills(db, [u.id for u, _ in rows])
+    all_bn = matchsvc.students_bonuses(db, [u.id for u, _ in rows])
     for u, prof in rows:
-        if not prof.open_to_match and u.id not in apps:
-            continue
-        sk_, bn = matchsvc.student_profile(db, u.id)
+        sk_, bn = all_sk.get(u.id, {}), all_bn.get(u.id, [])
         m = matchsvc.score_job(j, sk_, bonuses=bn)
         if m["score"] < min_score and u.id not in apps:
             continue
@@ -218,7 +220,8 @@ def candidates(jid: str, min_score: float = 0, user: User = Depends(employer), d
                                 "has_resume": bool(prof.resume_filename)},
                     **m, "application": {"status": a.status, "initiated_by": a.initiated_by} if a else None})
     out.sort(key=lambda x: (x["application"] is None, -x["score"]))
-    return {"job": job_out(j), "candidates": out}
+    limit = max(1, min(limit, 500))
+    return {"job": job_out(j), "candidates": out[:limit], "total": len(out), "limit": limit}
 
 
 class StatusIn(BaseModel):
@@ -313,6 +316,7 @@ def explain_for_employer(jid: str, sid: str, user: User = Depends(employer), db:
 # ── Employer talent search (all students who opted in) ─────────────────────────
 @router.get("/employer/talent")
 def talent_search(skills: str = "", q: str = "", program_id: str = "", goal: str = "", verified_only: bool = False,
+                  faculty_verified: bool = False,
                   limit: int = 50, user: User = Depends(employer), db: Session = Depends(get_db)):
     from ..models import Evidence, Skill
 
@@ -331,12 +335,14 @@ def talent_search(skills: str = "", q: str = "", program_id: str = "", goal: str
     for e in db.scalars(select(Evidence).where(Evidence.org_id == user.org_id, Evidence.status == "verified")):
         verified.setdefault(e.student_id, []).append(e.title)
     out = []
-    for u, prof in db.execute(stmt).all():
-        if verified_only and u.id not in verified:
-            continue
-        sk_ = matchsvc.student_skills(db, u.id)
+    pairs = [(u, prof) for u, prof in db.execute(stmt).all() if not verified_only or u.id in verified]
+    all_sk = matchsvc.students_skills(db, [u.id for u, _ in pairs])
+    skill_names = {sk.id: sk.name for sk in db.scalars(select(Skill))}
+    for u, prof in pairs:
+        sk_ = all_sk.get(u.id, {})
         if want:
-            hits = [{"skill": names[s], "level": round(min(sk_.get(s, {}).get("level", 0), 1), 2),
+            hits = [{"skill": names[s], "faculty_verified": sk_.get(s, {}).get("faculty_verified", False),
+                     "level": round(min(sk_.get(s, {}).get("level", 0), 1), 2) if not faculty_verified or sk_.get(s, {}).get("faculty_verified") else 0.0,
                      "sources": list(dict.fromkeys(sk_.get(s, {}).get("sources", [])))[:3]} for s in want if s in names]
             score = round(100 * sum(h["level"] for h in hits) / max(len(hits), 1), 1)
             if score == 0:
@@ -344,10 +350,15 @@ def talent_search(skills: str = "", q: str = "", program_id: str = "", goal: str
         else:
             hits, score = [], float(len(sk_))
         top = sorted(((v["level"], s) for s, v in sk_.items()), reverse=True)[:8]
-        top_names = {s.id: s.name for s in db.scalars(select(Skill).where(Skill.id.in_([s for _, s in top])))}
+        top_names = {s: skill_names[s] for _, s in top if s in skill_names}
+        fv = [s for s, v in sk_.items() if v.get("faculty_verified")]
+        if faculty_verified and not want and not fv:
+            continue
+        top_names_all = {s: skill_names[s] for s in fv if s in skill_names}
         out.append({"student": {"id": u.id, "name": u.full_name, "headline": prof.headline, "program": progs.get(prof.program_id),
                                 "career_goal": prof.career_goal},
                     "score": score, "skills": hits, "top_skills": [top_names[s] for _, s in top if s in top_names],
-                    "verified": verified.get(u.id, []), "skill_count": len(sk_)})
+                    "verified": verified.get(u.id, []), "skill_count": len(sk_),
+                    "faculty_verified": sorted(top_names_all[s] for s, v in sk_.items() if v.get("faculty_verified") and s in top_names_all)[:10]})
     out.sort(key=lambda x: -x["score"])
     return {"searched": [names[s] for s in want if s in names], "results": out[: min(limit, 200)]}

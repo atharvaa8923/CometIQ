@@ -1,5 +1,6 @@
 """Live job sources. All optional; each returns normalized posting dicts."""
 import csv
+from datetime import datetime, timedelta, timezone
 import hashlib
 import html
 import io
@@ -46,10 +47,13 @@ def fetch_github_list(name: str, url: str, limit: int = 150) -> list[dict]:
         if not family:
             continue
         links = _HREF.findall(cells[3])
+        age = re.match(r"\s*(\d+)\s*([dmo])", _TAG.sub("", cells[4]) if len(cells) > 4 else "")
+        days = (int(age.group(1)) * (30 if age.group(2) in "mo" else 1)) if age else 0
         ext = hashlib.sha1(f"{company}|{title}|{location}".encode()).hexdigest()[:20]
         out.append({"title": title, "company": company, "location": " ".join(location.split())[:200], "role_family": family,
                     "url": links[0] if links else None, "external_id": ext, "source": "github",
-                    "employment_type": "Internship" if "intern" in name.lower() or "intern" in title.lower() else "Full-time"})
+                    "employment_type": "Internship" if "intern" in name.lower() or "intern" in title.lower() else "Full-time",
+                    "posted_at": (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()})
         if len(out) >= limit:
             break
     return out
@@ -68,7 +72,7 @@ def fetch_adzuna(query: str, where: str = "Dallas", pages: int = 1) -> list[dict
         for j in r.json().get("results", []):
             out.append({"title": j.get("title", ""), "company": (j.get("company") or {}).get("display_name"),
                         "location": (j.get("location") or {}).get("display_name"), "description": j.get("description"),
-                        "url": j.get("redirect_url"), "external_id": str(j.get("id")), "source": "adzuna"})
+                        "url": j.get("redirect_url"), "external_id": str(j.get("id")), "source": "adzuna", "posted_at": j.get("created")})
     return out
 
 
@@ -84,7 +88,7 @@ def parse_csv(data: bytes) -> list[dict]:
         rows.append({"title": r["title"], "company": r.get("company") or None, "location": r.get("location") or None,
                      "description": r.get("description") or None, "url": r.get("url") or None,
                      "employment_type": r.get("employment_type") or None, "role_family": r.get("role_family") or None,
-                     "external_id": ext, "source": "csv"})
+                     "external_id": ext, "source": "csv", "posted_at": r.get("posted_at") or r.get("date_posted") or None})
     return rows
 
 
@@ -106,5 +110,5 @@ def fetch_usajobs(query: str, location: str = "Dallas", limit: int = 50) -> list
         out.append({"title": d.get("PositionTitle", ""), "company": d.get("OrganizationName") or d.get("DepartmentName"),
                     "location": d.get("PositionLocationDisplay"), "description": desc or None,
                     "url": d.get("PositionURI"), "external_id": str(d.get("PositionID") or item.get("MatchedObjectId")),
-                    "source": "usajobs"})
+                    "source": "usajobs", "posted_at": d.get("PublicationStartDate")})
     return [x for x in out if x["title"]]

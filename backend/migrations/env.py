@@ -4,7 +4,7 @@ from sqlalchemy import engine_from_config, pool
 
 from app import models  # noqa: F401  (registers all tables on Base.metadata)
 from app.config import get_settings
-from app.db import Base
+from app.db import Base, include_object
 
 config = context.config
 target_metadata = Base.metadata
@@ -33,7 +33,8 @@ def run_online() -> None:
 
 def _run(conn) -> None:
     # render_as_batch: lets column changes work on SQLite as well as PostgreSQL
-    context.configure(connection=conn, target_metadata=target_metadata, render_as_batch=True, compare_type=True)
+    context.configure(connection=conn, target_metadata=target_metadata, render_as_batch=True, compare_type=True,
+                      include_object=include_object)
     with context.begin_transaction():
         context.run_migrations()
 

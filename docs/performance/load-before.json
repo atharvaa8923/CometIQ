@@ -1,0 +1,406 @@
+[
+  {
+    "concurrency": 20,
+    "seconds": 30.8,
+    "requests": 559,
+    "throughput_rps": 18.1,
+    "p50_ms": 862.9,
+    "p95_ms": 2595.7,
+    "p99_ms": 3622.1,
+    "max_ms": 4898.7,
+    "errors_5xx": 0,
+    "rate_limited_429": 0,
+    "error_samples": [],
+    "endpoints": [
+      {
+        "endpoint": "POST /api/curriculum/programs/f9dec96be7cb4e04b9ab63322614e1c3/simulate",
+        "n": 8,
+        "p50_ms": 3784.4,
+        "p95_ms": 4898.7,
+        "p99_ms": 4898.7,
+        "mean_ms": 3623.7,
+        "status": {
+          "200": 8
+        }
+      },
+      {
+        "endpoint": "GET /api/match/employer/talent",
+        "n": 37,
+        "p50_ms": 1486.9,
+        "p95_ms": 3530.8,
+        "p99_ms": 4479.0,
+        "mean_ms": 1695.3,
+        "status": {
+          "200": 37
+        }
+      },
+      {
+        "endpoint": "GET /api/graph/map",
+        "n": 9,
+        "p50_ms": 381.9,
+        "p95_ms": 3503.7,
+        "p99_ms": 3503.7,
+        "mean_ms": 727.2,
+        "status": {
+          "200": 9
+        }
+      },
+      {
+        "endpoint": "GET /api/match/learn-next",
+        "n": 24,
+        "p50_ms": 1689.1,
+        "p95_ms": 3134.7,
+        "p99_ms": 3249.2,
+        "mean_ms": 1629.9,
+        "status": {
+          "200": 24
+        }
+      },
+      {
+        "endpoint": "GET /api/gap/syllabi",
+        "n": 21,
+        "p50_ms": 2303.7,
+        "p95_ms": 3054.1,
+        "p99_ms": 3699.7,
+        "mean_ms": 2309.0,
+        "status": {
+          "200": 21
+        }
+      },
+      {
+        "endpoint": "GET /api/curriculum/programs/f9dec96be7cb4e04b9ab63322614e1c3/map",
+        "n": 9,
+        "p50_ms": 458.1,
+        "p95_ms": 2595.7,
+        "p99_ms": 2595.7,
+        "mean_ms": 692.8,
+        "status": {
+          "200": 9
+        }
+      },
+      {
+        "endpoint": "GET /api/match/jobs",
+        "n": 75,
+        "p50_ms": 1571.2,
+        "p95_ms": 2291.4,
+        "p99_ms": 2468.3,
+        "mean_ms": 1612.4,
+        "status": {
+          "200": 75
+        }
+      },
+      {
+        "endpoint": "GET /api/badges/mine",
+        "n": 41,
+        "p50_ms": 1515.5,
+        "p95_ms": 2244.1,
+        "p99_ms": 2777.0,
+        "mean_ms": 1556.8,
+        "status": {
+          "200": 41
+        }
+      },
+      {
+        "endpoint": "GET /api/path/recommendations",
+        "n": 44,
+        "p50_ms": 1443.1,
+        "p95_ms": 1858.1,
+        "p99_ms": 1960.4,
+        "mean_ms": 1351.2,
+        "status": {
+          "200": 44
+        }
+      },
+      {
+        "endpoint": "GET /api/path/overview",
+        "n": 65,
+        "p50_ms": 1015.7,
+        "p95_ms": 1667.3,
+        "p99_ms": 1686.2,
+        "mean_ms": 1036.7,
+        "status": {
+          "200": 65
+        }
+      },
+      {
+        "endpoint": "GET /api/match/employer/jobs/1d0fb3a3d76948caa409ffa37f6104a6/candidates",
+        "n": 24,
+        "p50_ms": 524.2,
+        "p95_ms": 1530.2,
+        "p99_ms": 3026.5,
+        "mean_ms": 639.6,
+        "status": {
+          "200": 24
+        }
+      },
+      {
+        "endpoint": "GET /api/auth/me",
+        "n": 22,
+        "p50_ms": 296.3,
+        "p95_ms": 911.7,
+        "p99_ms": 954.0,
+        "mean_ms": 369.7,
+        "status": {
+          "200": 22
+        }
+      },
+      {
+        "endpoint": "GET /api/gap/analyses/e809ec6ca78445a7a7f82b600558e2b6",
+        "n": 24,
+        "p50_ms": 710.4,
+        "p95_ms": 911.6,
+        "p99_ms": 1139.1,
+        "mean_ms": 683.4,
+        "status": {
+          "200": 24
+        }
+      },
+      {
+        "endpoint": "GET /api/search",
+        "n": 46,
+        "p50_ms": 410.6,
+        "p95_ms": 665.5,
+        "p99_ms": 1014.0,
+        "mean_ms": 462.5,
+        "status": {
+          "200": 46
+        }
+      },
+      {
+        "endpoint": "GET /api/curriculum/scorecard",
+        "n": 14,
+        "p50_ms": 412.8,
+        "p95_ms": 652.0,
+        "p99_ms": 702.8,
+        "mean_ms": 441.8,
+        "status": {
+          "200": 14
+        }
+      },
+      {
+        "endpoint": "GET /api/match/employer/jobs",
+        "n": 24,
+        "p50_ms": 470.1,
+        "p95_ms": 641.7,
+        "p99_ms": 664.1,
+        "mean_ms": 451.6,
+        "status": {
+          "200": 24
+        }
+      },
+      {
+        "endpoint": "GET /api/notifications",
+        "n": 72,
+        "p50_ms": 343.6,
+        "p95_ms": 602.9,
+        "p99_ms": 638.1,
+        "mean_ms": 353.0,
+        "status": {
+          "200": 72
+        }
+      }
+    ]
+  },
+  {
+    "concurrency": 50,
+    "seconds": 32.7,
+    "requests": 566,
+    "throughput_rps": 17.3,
+    "p50_ms": 2583.4,
+    "p95_ms": 5198.0,
+    "p99_ms": 6249.3,
+    "max_ms": 8256.1,
+    "errors_5xx": 0,
+    "rate_limited_429": 0,
+    "error_samples": [],
+    "endpoints": [
+      {
+        "endpoint": "POST /api/curriculum/programs/f9dec96be7cb4e04b9ab63322614e1c3/simulate",
+        "n": 12,
+        "p50_ms": 4799.9,
+        "p95_ms": 6751.3,
+        "p99_ms": 8256.1,
+        "mean_ms": 5124.6,
+        "status": {
+          "200": 12
+        }
+      },
+      {
+        "endpoint": "GET /api/match/employer/talent",
+        "n": 30,
+        "p50_ms": 3292.9,
+        "p95_ms": 6466.9,
+        "p99_ms": 6814.2,
+        "mean_ms": 3725.5,
+        "status": {
+          "200": 30
+        }
+      },
+      {
+        "endpoint": "GET /api/gap/syllabi",
+        "n": 29,
+        "p50_ms": 4678.0,
+        "p95_ms": 6219.9,
+        "p99_ms": 6320.5,
+        "mean_ms": 4587.9,
+        "status": {
+          "200": 29
+        }
+      },
+      {
+        "endpoint": "GET /api/badges/mine",
+        "n": 38,
+        "p50_ms": 3512.2,
+        "p95_ms": 5311.1,
+        "p99_ms": 6219.9,
+        "mean_ms": 3618.4,
+        "status": {
+          "200": 38
+        }
+      },
+      {
+        "endpoint": "GET /api/match/learn-next",
+        "n": 18,
+        "p50_ms": 3593.1,
+        "p95_ms": 4935.2,
+        "p99_ms": 5218.6,
+        "mean_ms": 3633.2,
+        "status": {
+          "200": 18
+        }
+      },
+      {
+        "endpoint": "GET /api/match/jobs",
+        "n": 75,
+        "p50_ms": 3344.2,
+        "p95_ms": 4901.3,
+        "p99_ms": 5198.0,
+        "mean_ms": 3366.7,
+        "status": {
+          "200": 75
+        }
+      },
+      {
+        "endpoint": "GET /api/path/recommendations",
+        "n": 45,
+        "p50_ms": 3026.8,
+        "p95_ms": 4652.3,
+        "p99_ms": 5566.3,
+        "mean_ms": 3138.7,
+        "status": {
+          "200": 45
+        }
+      },
+      {
+        "endpoint": "GET /api/path/overview",
+        "n": 66,
+        "p50_ms": 2854.9,
+        "p95_ms": 4509.1,
+        "p99_ms": 5018.2,
+        "mean_ms": 2765.6,
+        "status": {
+          "200": 66
+        }
+      },
+      {
+        "endpoint": "GET /api/notifications",
+        "n": 74,
+        "p50_ms": 1860.3,
+        "p95_ms": 3888.8,
+        "p99_ms": 4350.4,
+        "mean_ms": 1838.0,
+        "status": {
+          "200": 74
+        }
+      },
+      {
+        "endpoint": "GET /api/curriculum/scorecard",
+        "n": 21,
+        "p50_ms": 1996.9,
+        "p95_ms": 3441.0,
+        "p99_ms": 3974.5,
+        "mean_ms": 1989.4,
+        "status": {
+          "200": 21
+        }
+      },
+      {
+        "endpoint": "GET /api/match/employer/jobs",
+        "n": 21,
+        "p50_ms": 2126.4,
+        "p95_ms": 3346.2,
+        "p99_ms": 3527.4,
+        "mean_ms": 2005.5,
+        "status": {
+          "200": 21
+        }
+      },
+      {
+        "endpoint": "GET /api/gap/analyses/e809ec6ca78445a7a7f82b600558e2b6",
+        "n": 25,
+        "p50_ms": 2446.5,
+        "p95_ms": 3134.0,
+        "p99_ms": 3424.9,
+        "mean_ms": 2279.9,
+        "status": {
+          "200": 25
+        }
+      },
+      {
+        "endpoint": "GET /api/search",
+        "n": 45,
+        "p50_ms": 1693.2,
+        "p95_ms": 3014.1,
+        "p99_ms": 6383.5,
+        "mean_ms": 1774.6,
+        "status": {
+          "200": 45
+        }
+      },
+      {
+        "endpoint": "GET /api/match/employer/jobs/1d0fb3a3d76948caa409ffa37f6104a6/candidates",
+        "n": 26,
+        "p50_ms": 1909.7,
+        "p95_ms": 2994.0,
+        "p99_ms": 5359.9,
+        "mean_ms": 2048.6,
+        "status": {
+          "200": 26
+        }
+      },
+      {
+        "endpoint": "GET /api/curriculum/programs/f9dec96be7cb4e04b9ab63322614e1c3/map",
+        "n": 12,
+        "p50_ms": 2326.7,
+        "p95_ms": 2899.8,
+        "p99_ms": 3097.5,
+        "mean_ms": 2026.6,
+        "status": {
+          "200": 12
+        }
+      },
+      {
+        "endpoint": "GET /api/auth/me",
+        "n": 21,
+        "p50_ms": 1501.6,
+        "p95_ms": 2812.7,
+        "p99_ms": 4201.7,
+        "mean_ms": 1626.3,
+        "status": {
+          "200": 21
+        }
+      },
+      {
+        "endpoint": "GET /api/graph/map",
+        "n": 8,
+        "p50_ms": 1486.8,
+        "p95_ms": 1851.9,
+        "p99_ms": 1851.9,
+        "mean_ms": 1247.7,
+        "status": {
+          "200": 8
+        }
+      }
+    ]
+  }
+]

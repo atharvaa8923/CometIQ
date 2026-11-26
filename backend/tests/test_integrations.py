@@ -77,7 +77,10 @@ def test_nightly_lock_is_unique(client):
 
 def test_admin_integrations(client, tokens):
     r = client.get("/api/admin/integrations", headers=tokens["admin"]).json()
-    assert set(r["job_sources"]) == {"github", "adzuna", "usajobs"} and r["job_sources"]["github"]["enabled"]
+    assert set(r["job_sources"]) == {"github", "adzuna", "usajobs", "handshake"} and r["job_sources"]["github"]["enabled"]
+    inst = r["institution"]
+    assert set(inst) == {"sso", "canvas", "credentials", "open_badges", "handshake"} and inst["open_badges"]["enabled"]
+    assert not inst["sso"]["enabled"] and not inst["canvas"]["enabled"] and not inst["credentials"]["enabled"]
     assert client.get("/api/admin/integrations", headers=tokens["faculty"]).status_code == 403
     assert client.post("/api/admin/ai/test", headers=tokens["admin"]).json()["ok"] is False  # no key in tests
 
@@ -147,7 +150,8 @@ def test_login_rate_limit_and_headers(client):
     authmod._failures.clear()
     r = client.get("/api/health")
     assert r.headers["X-Frame-Options"] == "DENY" and r.headers["X-Content-Type-Options"] == "nosniff"
-    assert client.get("/api/auth/public-config").json() == {"demo": True}
+    cfg = client.get("/api/auth/public-config").json()
+    assert cfg["demo"] is True and cfg["pilot_roles"] is None and cfg["sso"]["enabled"] is False
 
 
 def test_production_seed_has_no_demo_users(tmp_path, monkeypatch):

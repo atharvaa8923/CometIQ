@@ -1,5 +1,17 @@
 # CometIQ — UTD pilot launch checklist
 
+> **Start with the faculty-only CometGap pilot.** It uses one program, 2–3 approved syllabi and a documented job sample, with no student
+> data: see [PILOT-PLAN.md](PILOT-PLAN.md), [PILOT-RUNBOOK.md](PILOT-RUNBOOK.md) and [PILOT-AGREEMENT.md](PILOT-AGREEMENT.md).
+> Before that pilot starts:
+> - [ ] Program owner confirms the catalog year (recorded in Knowledge Graph → Programs)
+> - [ ] Each instructor of record approves their syllabus (recorded in the gap report)
+> - [ ] Job sample created, with its method written down and its postings downloaded
+> - [ ] Separate pilot environment from `render.pilot.yaml`; `/api/health/ready` shows `demo_accounts: 0` and `pilot_roles: ["admin","faculty"]`
+> - [ ] Restore drill and deletion drill repeated on the pilot environment (runbook §4–5)
+> - [ ] Data ownership and support agreement filled in and signed
+>
+> The checklist below is for the later, wider launch with students, advisors and employers.
+
 Everything in **Software** is built and tested. The **Institution** items need people at UTD and
 can't be done in code. Start them early; reviews take weeks.
 

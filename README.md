@@ -1,15 +1,19 @@
 # CometIQ — AI Intelligence for Education, Skills & Talent
 
+> 📘 **Full project overview with screenshots, architecture and tools:** [docs/overview/CometIQ-Project-Overview.md](docs/overview/CometIQ-Project-Overview.md)
+
 **From industry demand to student success.** CometIQ is a multi-tenant SaaS platform that connects
 industry needs, university curriculum, student goals and employer opportunities through four modules
 that share one knowledge graph:
 
 | Module | Who | What it does |
 |---|---|---|
-| **CometGap** — Curriculum–Industry Gap Analysis | Faculty, admins | Upload a syllabus (PDF/DOCX/TXT) and get a coverage score against live job postings. Shows priority gaps, emerging technologies, courses that already teach each gap, a program-wide course × skill heatmap, and PDF/Excel reports. |
+| **CometGap** — Curriculum–Industry Gap Analysis | Faculty, admins | Upload a syllabus (PDF/DOCX/TXT) and get a coverage score against live job postings or a **documented, frozen job sample**. For every skill: the **syllabus excerpt**, how many sampled postings request it (required/preferred), and the postings' **sources and date range**. **Faculty review** each finding (practiced / mentioned only / not covered / not relevant), record a **rationale** for corrections and the follow-up, and track what was confirmed, corrected or acted on (*Pilot review*). For each reviewed gap faculty record a **decision**: add to this course, covered elsewhere, defer, or out of scope. Each decision saves the rationale, reviewer, date and the exact evidence versions. Accepted additions generate a **CometForge draft** shown **beside the current syllabus**. **Course history** keeps every syllabus, catalog and job-sample version, and splits each score change into *course revision*, *demand change* and *method update*. Every past report can be recomputed exactly (*Verify reproducibility*). |
+| **Curriculum** — Proposals, curriculum map, outcomes | Faculty, admins | **Curriculum proposals** review syllabus changes like pull requests: a side-by-side diff against the current version, line comments, *approve / request changes* from colleagues (author excluded, `CURRICULUM_APPROVALS`, default 2), new revisions that reset the votes, then **adopt** the frozen approved text as the next syllabus version. Each proposal generates a **course change request** (PDF/Word). The **AACSB curriculum map** shows where each in-demand skill is Introduced, Practiced or Mastered across a program, based on faculty entries, then faculty reviews, then unreviewed signals (marked), with gap/overlap flags and an Excel export. **Outcomes** compare students who completed a course before and after an implemented change, only in groups of at least `OUTCOME_MIN_COHORT` (default 10). |
+| **Management, design & partnerships** | Faculty, admins, students, employers | **Program scorecard** across all programs (coverage trend, undecided gaps, waiting proposals, skills never mastered, badges). **Syllabus copilot**: edit a syllabus and see the score, evidence and map position update as you type. **Program simulator**: try moving skills, adding/removing courses or prerequisites and see coverage, I/P/M flags, prerequisite chains and affected student plans. **Skill stacks**: role-ready credentials from badges with student progress, next courses and employer alerts. **Employer-sponsored projects** for gaps faculty choose to share, accepted into CometForge, with partner-named badges and first look for the sponsor. **Ask CometIQ**: a LangGraph agent that answers only from stored records, with citations. | Shows priority gaps, emerging technologies, courses that already teach each gap, a program-wide course × skill heatmap, and PDF/Excel reports. |
 | **CometForge** — AI Course & Syllabus Generation | Faculty, admins | Turns a gap report into an updated syllabus: weekly modules, Bloom-aligned learning outcomes, rebalanced assessments, an industry project, AACSB/ABET and program-goal mapping, and a projected before/after score. Supports editing, versions, approval and Word/PDF export. |
 | **CometPath** — AI Degree & Career Planner | Students, advisors | Program/concentration progress with core OR-groups. Builds a prerequisite-safe semester-by-semester plan optimized for a career goal, tracks career readiness, recommends what to take next, and suggests a concentration when another fits the goal better. Also: **what-if plans** ("what if I switch to Finance?"), **advisor review and approval**, **PDF plan export**, and **live UTD sections and grade distributions** from Nebula Labs. |
-| **CometMatch** — Student–Employer Talent Matching | Students, employers, advisors | Students upload a resume and see their best-fit jobs. Employers post roles, see ranked candidates and **search all opted-in students** by skill. Every fit score has a transparent breakdown with evidence, an **AI explanation**, and **resume tips**. Students document **courses, certifications and projects with proof**; once an admin or advisor verifies them they count as full evidence, and **verified certifications add bonus points** (default +10). **Skills to learn next** links straight into CometPath. |
+| **CometMatch** — Student–Employer Talent Matching | Students, employers, advisors | Students upload a resume and see their best-fit jobs. Employers post roles, see ranked candidates and **search all opted-in students** by skill. Every fit score has a transparent breakdown with evidence, an **AI explanation**, and **resume tips**. Students earn **faculty-verified skill badges** when faculty confirmed a course has students practice (or master) a skill *and* an advisor verified their completion. Badges have shareable public verification links, and employers can **count only faculty-verified skills**. Students document **courses, certifications and projects with proof**; once an admin or advisor verifies them they count as full evidence, and **verified certifications add bonus points** (default +10). **Skills to learn next** links straight into CometPath. |
 
 The **feedback loop**: job postings → CometGap finds gaps → CometForge closes them → approved syllabi update
 the course's skills in the knowledge graph → CometPath recommends those courses → CometMatch shows employers
@@ -57,10 +61,17 @@ cd backend && ../.venv/bin/python -m pytest -q
 # against PostgreSQL:
 TEST_DATABASE_URL=postgresql+psycopg://user:pass@host/db ../.venv/bin/python -m pytest -q
 ```
+`tests/test_properties.py` checks scoring invariants on thousands of random inputs (Hypothesis). Performance:
+`scripts/perf_profile.py` (latency and query count per endpoint at realistic scale) and `scripts/load_test.py` (many
+signed-in users against a running server); results in [docs/performance/LOAD-TEST.md](docs/performance/LOAD-TEST.md).
 
 ---
 
-**Deploying for real:** see [DEPLOY.md](DEPLOY.md) (Render blueprint included). Production mode (`SEED_DEMO=false`) creates no demo accounts.
+**Deploying for real:** see [DEPLOY.md](DEPLOY.md); the faculty pilot takes ~15 minutes with [docs/PILOT-DEPLOY.md](docs/PILOT-DEPLOY.md) (Render blueprint included). Production mode (`SEED_DEMO=false`) creates no demo accounts.
+
+**Faculty pilot:** [PILOT-PLAN.md](PILOT-PLAN.md) (program, syllabi, job sample, review protocol, measures), [PILOT-RUNBOOK.md](PILOT-RUNBOOK.md)
+(separate environment via `render.pilot.yaml`, demo removal, backup/restore and deletion drills), [PILOT-AGREEMENT.md](PILOT-AGREEMENT.md)
+(data ownership and support template). Operations: `python -m app.manage remove-demo-data | restore-check | verify-erasure`.
 
 ## Configuration (`.env`)
 
@@ -73,6 +84,7 @@ TEST_DATABASE_URL=postgresql+psycopg://user:pass@host/db ../.venv/bin/python -m 
 | `ADZUNA_APP_ID` / `ADZUNA_APP_KEY`, `USAJOBS_API_KEY` / `USAJOBS_EMAIL` | Optional live job feeds. Synced nightly (`JOB_SYNC_HOUR_UTC`) and on demand from Organization → Live job market sources. |
 | `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` | Production: the first admin account. |
 | `SEED_DEMO` | Seed the demo institution on first start. |
+| `PILOT_ROLES` | e.g. `admin,faculty`: only these roles can register or sign in (faculty-only pilot). Empty = all roles. |
 
 ### AI engines
 Every AI feature has two engines that return the **same structured output**:
@@ -91,6 +103,16 @@ Every AI feature has two engines that return the **same structured output**:
 ---
 
 ## How the scores work (transparent by design)
+
+- **Versioned and reproducible.** Every report records the syllabus version (text plus extracted skills), a frozen snapshot of the job
+  sample (each posting's skills, source and date), the catalog version, the scoring version (`SCORING_VERSION` in
+  `services/versions.py`) and the skill-list version. Old scoring functions stay registered, so old reports recompute exactly.
+  When two reports are compared, all four combinations of {old, new syllabus} × {old, new job sample} are scored with the current method:
+  *course revision* and *demand change* are each the average effect of swapping that one input (a Shapley split), and
+  *method update* is whatever the scoring or skill-list change accounts for. The three parts add up exactly to the total change.
+- The CometGap score is **mention-based**: it ranks what to review first. Faculty decide whether students actually practice or demonstrate a skill.
+  The **faculty-reviewed coverage** uses faculty classifications where they exist (practiced = 1, mentioned only = 0.5, not covered = 0;
+  not relevant leaves the denominator) and the mention signal elsewhere.
 
 - **CometGap coverage** = Σ demand × status weight / Σ demand over the top-N market skills.
   Demand is the share of target postings asking for the skill (required = 1.0, preferred = 0.5). Status:
@@ -144,14 +166,30 @@ cd backend && ../.venv/bin/alembic revision --autogenerate -m "describe the chan
 ../.venv/bin/python -m pytest -q   # test_migrations fails if models and migrations disagree
 ```
 
+### AACSB assurance of learning
+Curriculum → AACSB report assembles each program's competency goals, where they are taught (curriculum map), direct
+measures (graded Canvas work), faculty-entered results and closing-the-loop actions, exportable as Word or PDF. Gap scores
+for courses imported from Canvas are grade-weighted (a skill counts as practiced when it carries ≥ 5% of the grade).
+See [docs/AACSB-REPORT.md](docs/AACSB-REPORT.md).
+
+### University systems
+Sign in with the **UTD NetID** (OpenID Connect: Microsoft Entra ID or Shibboleth), **import syllabi and graded assignments
+from Canvas**, send faculty-verified badges to **Canvas Credentials**, issue every badge as a signed **Open Badges 3.0**
+credential with an **Add to LinkedIn** link, load the career center's **Handshake** postings, and show a **CometIQ skills**
+page inside every Canvas course (LTI 1.3). Each is off until
+configured; setup steps for IT, Canvas admins and the career center are in [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
+`backend/scripts/fake_institution.py` runs local stand-ins for trying every flow without real credentials.
+
 ### Production readiness
 Password reset and notification emails, a background job queue for AI work with a per-institution Claude budget, privacy
 controls (consent, data export, account deletion), WCAG 2.1 AA accessibility (axe: 0 violations), monitoring (request IDs,
-JSON logs, Sentry, readiness checks), full UTD catalog and official-syllabus import via Nebula. See
+JSON logs, Sentry, readiness checks), full UTD catalog and official-syllabus import via Nebula. Under load: about 104 requests/s
+with no errors on 4 shared cores (3 workers, PostgreSQL), per-user rate limits on expensive endpoints, duplicate-submission
+protection (idempotency keys), one error format on every endpoint, PostgreSQL full-text search and daily data retention. See
 [LAUNCH-CHECKLIST.md](LAUNCH-CHECKLIST.md) for the institutional steps before real students use it.
 
 ### What has and hasn't been tested live
-- Tested end to end in a browser and by 62 API tests (SQLite and PostgreSQL): all four modules, roles, evidence verification,
+- Tested end to end in a browser and by 68 API tests (SQLite and PostgreSQL): all four modules, roles, evidence verification,
   advisor reviews, what-if, PDFs, talent search, production seeding.
 - **Claude, Nebula (catalog, sections, grades, syllabus links), Adzuna, USAJobs, Resend/SMTP email and Sentry** are implemented against their documented APIs and tested with fakes/fixtures, but have
   **not yet been called live** (no keys and/or the hosts were unreachable from the build environment). After deploying, use

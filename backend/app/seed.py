@@ -3,7 +3,7 @@ import json
 import logging
 from pathlib import Path
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from .config import get_settings
@@ -34,6 +34,13 @@ def sync_skills(db: Session) -> None:
     db.flush()
 
 
+def _catalog_year(url: str | None) -> str | None:
+    import re
+
+    m = re.search(r"/(20\d\d)/", url or "")
+    return f"{m.group(1)}-{str(int(m.group(1)) + 1)[2:]}" if m else None
+
+
 def seed_catalog(db: Session, org: Organization) -> None:
     cat = json.loads((DATA / "catalog.json").read_text())
     ids = {s.name: s.id for s in db.scalars(select(Skill))}
@@ -52,7 +59,8 @@ def seed_catalog(db: Session, org: Organization) -> None:
     for p in cat["programs"]:
         prog = Program(org_id=org.id, name=p["name"], type=p["type"], department=p["department"],
                        total_sch=p["total_sch"] or 0, core_sch=p["core_sch"] or 0, elective_sch=p["elective_sch"] or 0,
-                       is_stem=bool(p["is_stem"]), catalog_url=p["catalog_url"], prereq_notes=p["prereq_notes"])
+                       is_stem=bool(p["is_stem"]), catalog_url=p["catalog_url"], prereq_notes=p["prereq_notes"],
+                       catalog_year=_catalog_year(p["catalog_url"]))
         for i, c in enumerate(p["core"] or []):
             if c["code"] in by_code:
                 prog.core.append(ProgramCore(course_id=by_code[c["code"]].id, or_group=c["or_group"] or 0, sort=i))
@@ -201,7 +209,7 @@ def seed_sample_syllabus(db: Session, org: Organization, owner: User) -> None:
     found = sk.extract_builtin(raw)
     ids = sk.skill_ids(db, found)
     for name, info in found.items():
-        syl.skills.append(SyllabusSkill(skill_id=ids[name], mentions=info["mentions"], evidence=info["evidence"]))
+        syl.skills.append(SyllabusSkill(skill_id=ids[name], mentions=info["mentions"], evidence=info["evidence"], excerpts=info.get("excerpts")))
     db.flush()
     gapsvc.analyze(db, syl, "Data Analyst")
 
@@ -227,13 +235,14 @@ def seed_production(db: Session) -> None:
 
 def ensure_bootstrap_admin(db: Session) -> None:
     s = get_settings()
-    if s.SEED_DEMO or not s.BOOTSTRAP_ADMIN_EMAIL or len(s.BOOTSTRAP_ADMIN_PASSWORD) < 12:
+    if not s.BOOTSTRAP_ADMIN_EMAIL or len(s.BOOTSTRAP_ADMIN_PASSWORD) < 12:
         return
     db.flush()  # the session doesn't autoflush: make an admin created by seed_production visible
     if db.scalar(select(User.id).where(func.lower(User.email) == s.BOOTSTRAP_ADMIN_EMAIL.lower())):
         return
     org = db.scalar(select(Organization).order_by(Organization.created_at))
-    if org and not db.scalar(select(User.id).where(User.org_id == org.id, User.role == "admin")):
+    # demo admins (@cometiq.app) don't count: a pilot environment started from demo data still gets its real admin
+    if org and not db.scalar(select(User.id).where(User.org_id == org.id, User.role == "admin", ~User.email.like("%@cometiq.app"))):
         db.add(User(org_id=org.id, email=s.BOOTSTRAP_ADMIN_EMAIL.lower(), full_name="Administrator", role="admin",
                     password_hash=hash_password(s.BOOTSTRAP_ADMIN_PASSWORD)))
 
@@ -243,6 +252,9 @@ def init_db() -> None:
 
     migrate()
     with SessionLocal() as db:
+        if db.get_bind().dialect.name == "postgresql":
+            # several app processes may start at once (uvicorn --workers): one seeds, the others wait and then see the data
+            db.execute(text("SELECT pg_advisory_xact_lock(724002)"))
         sync_skills(db)
         if not db.scalar(select(func.count(Organization.id))):
             if get_settings().SEED_DEMO:

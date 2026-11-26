@@ -32,8 +32,27 @@ def _limited(key: tuple[str, str]) -> bool:
 
 @router.get("/public-config")
 def public_config():
-    """Unauthenticated: tells the login page whether demo accounts exist."""
-    return {"demo": get_settings().SEED_DEMO}
+    """Unauthenticated: tells the login/register pages whether demo accounts exist and which roles are open."""
+    from ..integrations import sso
+
+    s = get_settings()
+    allowed = s.allowed_roles()
+    return {"demo": s.SEED_DEMO, "pilot_roles": sorted(allowed) if allowed else None,
+            "sso": {"enabled": sso.enabled(), "name": s.SSO_PROVIDER_NAME, "required": bool(sso.enabled() and s.SSO_REQUIRED),
+                    "domains": sorted(sso.domains()) if sso.enabled() else []}}
+
+
+def _sso_required_for(email: str) -> bool:
+    from ..integrations import sso
+
+    s = get_settings()
+    return bool(sso.enabled() and s.SSO_REQUIRED and sso.institutional(email)
+                and email.lower() != (s.BOOTSTRAP_ADMIN_EMAIL or "").lower())   # the bootstrap admin keeps a password (break-glass)
+
+
+def _role_allowed(role: str) -> bool:
+    allowed = get_settings().allowed_roles()
+    return not allowed or role in allowed
 
 
 @router.post("/login")
@@ -41,11 +60,15 @@ def login(body: LoginIn, request: Request, db: Session = Depends(get_db)):
     key = (request.client.host if request.client else "?", body.email.strip().lower())
     if _limited(key):
         raise HTTPException(429, "Too many failed attempts. Try again in 15 minutes.")
+    if _sso_required_for(body.email.strip()):
+        raise HTTPException(403, f"Sign in with {get_settings().SSO_PROVIDER_NAME} instead")
     user = db.scalar(select(User).where(func.lower(User.email) == body.email.strip().lower()))
     if not user or not verify_password(body.password, user.password_hash):
         _failures.setdefault(key, []).append(time.time())
         raise HTTPException(401, "Invalid email or password")
     _failures.pop(key, None)
+    if not _role_allowed(user.role):
+        raise HTTPException(403, "This CometIQ pilot is currently open to faculty only")
     if not user.is_active:
         raise HTTPException(403, "Account disabled")
     audit(db, user, "login")
@@ -55,9 +78,13 @@ def login(body: LoginIn, request: Request, db: Session = Depends(get_db)):
 
 @router.post("/register", status_code=201)
 def register(body: RegisterIn, db: Session = Depends(get_db)):
+    if not _role_allowed(body.role if body.join_code else "admin"):
+        raise HTTPException(403, "Registration for this role is closed during the pilot")
     if not body.accept_terms:
         raise HTTPException(400, "Please accept the privacy notice and terms of use")
     email = body.email.lower()
+    if _sso_required_for(email):
+        raise HTTPException(403, f"Use {get_settings().SSO_PROVIDER_NAME} to join with an institutional email")
     if db.scalar(select(User.id).where(func.lower(User.email) == email)):
         raise HTTPException(409, "Email already registered")
     role = body.role
@@ -88,6 +115,66 @@ def register(body: RegisterIn, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
     return {"token": create_token(user), "user": user_out(user)}
+
+
+# ── Single sign-on (OpenID Connect) ───────────────────────────────────────────
+@router.get("/sso/login", include_in_schema=False)
+def sso_login(next: str = "/app"):
+    from fastapi.responses import RedirectResponse
+
+    from ..integrations import sso
+
+    if not sso.enabled():
+        raise HTTPException(404, "Single sign-on is not configured")
+    try:
+        url, cookie = sso.start(next)
+    except sso.SSOError as e:
+        return RedirectResponse(_login_error(str(e)), status_code=303)
+    resp = RedirectResponse(url, status_code=303)
+    resp.set_cookie(sso.COOKIE, cookie, max_age=sso.STATE_TTL_S, httponly=True, samesite="lax", path="/api/auth/sso",
+                    secure=get_settings().APP_URL.startswith("https://"))
+    return resp
+
+
+def _login_error(msg: str) -> str:
+    from urllib.parse import quote
+
+    return f"{get_settings().APP_URL.rstrip('/')}/login?sso_error={quote(msg)}"
+
+
+@router.get("/sso/callback", include_in_schema=False)
+def sso_callback(request: Request, code: str = "", state: str = "", error: str = "", error_description: str = "",
+                 db: Session = Depends(get_db)):
+    """The identity provider redirects here. The CometIQ session token goes to the app in the URL fragment (#), which
+    browsers never send to servers, so it does not end up in proxy or access logs."""
+    from urllib.parse import quote
+
+    from fastapi.responses import RedirectResponse
+
+    from ..integrations import sso
+
+    def fail(msg: str):
+        r = RedirectResponse(_login_error(msg), status_code=303)
+        r.delete_cookie(sso.COOKIE, path="/api/auth/sso")
+        return r
+
+    if not sso.enabled():
+        return fail("Single sign-on is not configured")
+    if error:
+        return fail("Sign-in was cancelled" if error == "access_denied" else f"Sign-in failed: {(error_description or error)[:200]}")
+    try:
+        st = sso.read_state(request.cookies.get(sso.COOKIE), state)
+        tokens = sso.exchange(code, st["verifier"])
+        claims = sso.verify_id_token(tokens["id_token"], st["nonce"])
+        user, _ = sso.sign_in(db, claims)
+        db.commit()
+    except sso.SSOError as e:
+        db.rollback()
+        return fail(str(e))
+    resp = RedirectResponse(f"{get_settings().APP_URL.rstrip('/')}/sso/complete#token={create_token(user)}&next={quote(st['next'])}",
+                            status_code=303)
+    resp.delete_cookie(sso.COOKIE, path="/api/auth/sso")
+    return resp
 
 
 @router.get("/me")

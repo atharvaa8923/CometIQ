@@ -59,6 +59,21 @@ def _first_pos(line: str, skill: str) -> int:
     return min(hits, default=10_000)
 
 
+def _parse_date(v):
+    """ISO date/datetime (or a datetime) → aware datetime; None if missing/unparseable."""
+    from datetime import datetime, timezone
+
+    if not v:
+        return None
+    if isinstance(v, datetime):
+        return v if v.tzinfo else v.replace(tzinfo=timezone.utc)
+    try:
+        d = datetime.fromisoformat(str(v).strip().replace("Z", "+00:00"))
+        return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
 def upsert_job(db: Session, data: dict, org_id: str | None = None, employer_id: str | None = None,
                skills_override: dict[str, str] | None = None) -> Job | None:
     ext = data.get("external_id")
@@ -71,6 +86,9 @@ def upsert_job(db: Session, data: dict, org_id: str | None = None, employer_id: 
         role_family=family, employment_type=data.get("employment_type") or "Full-time",
         description=data.get("description"), url=data.get("url"),
     )
+    posted = _parse_date(data.get("posted_at"))
+    if posted:
+        job.posted_at = posted
     db.add(job)
     db.flush()
     set_job_skills(db, job, skills_override if skills_override is not None

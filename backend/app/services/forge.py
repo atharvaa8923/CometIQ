@@ -249,6 +249,9 @@ def build_builtin(syl, analysis: dict | None, focus: list[str], weeks: int, fram
     lab_lo = [o.id for o in outcomes if o.is_new]
     project_skills = (new_skills[:3] + covered[:3])[:6]
     target = (analysis or {}).get("target", "industry")
+    if target.startswith("Sample: "):  # a documented job sample: describe the market by its main role family instead
+        roles = ((analysis or {}).get("provenance") or {}).get("role_families") or {}
+        target = next(iter(roles), "All roles")
     project = Project(
         title=f"Industry Challenge: {syl.title} in Practice",
         description=(f"Teams act as analysts for a {target if target != 'All roles' else 'partner'} employer. Using a real dataset, they "

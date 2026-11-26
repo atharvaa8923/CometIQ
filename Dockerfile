@@ -17,4 +17,6 @@ COPY --from=web /web/dist /app/frontend/dist
 RUN useradd -m cometiq && chown -R cometiq /app
 USER cometiq
 EXPOSE 8000
+# uvicorn reads WEB_CONCURRENCY as the number of worker processes (about one per CPU core; see DEPLOY.md)
+ENV WEB_CONCURRENCY=2
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]

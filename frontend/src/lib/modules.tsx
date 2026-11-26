@@ -1,4 +1,4 @@
-import { BookOpen, BriefcaseBusiness, ClipboardCheck, LayoutDashboard, Library, Route, ScanSearch, Settings, ShieldCheck, Users } from "lucide-react";
+import { BookOpen, BriefcaseBusiness, ClipboardCheck, GitPullRequest, MessageCircleQuestion, LayoutDashboard, Library, Route, ScanSearch, Settings, ShieldCheck, Users } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Role } from "./auth";
 
@@ -14,6 +14,8 @@ export const MODULES: NavItem[] = [
 export const NAV: NavItem[] = [
   { to: "/app", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" />, roles: ["admin", "faculty", "student", "employer", "advisor"] },
   ...MODULES,
+  { to: "/curriculum", label: "Curriculum", icon: <GitPullRequest className="h-4 w-4" />, roles: ["faculty", "admin"] },
+  { to: "/ask", label: "Ask CometIQ", icon: <MessageCircleQuestion className="h-4 w-4" />, roles: ["faculty", "admin"] },
   { to: "/advising", label: "Advising", icon: <ClipboardCheck className="h-4 w-4" />, roles: ["advisor", "admin"] },
   { to: "/verify", label: "Verifications", icon: <ShieldCheck className="h-4 w-4" />, roles: ["advisor", "admin"] },
   { to: "/catalog", label: "Knowledge Graph", icon: <Library className="h-4 w-4" />, roles: ["admin", "faculty", "student", "advisor", "employer"] },

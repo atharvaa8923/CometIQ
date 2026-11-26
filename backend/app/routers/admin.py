@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import AuditLog, Organization, StudentProfile, User
+from ..config import get_settings
 from ..security import audit, hash_password, require_roles
 from .dashboard import org_counts
 
@@ -37,6 +38,9 @@ class NewUser(BaseModel):
 def create_user(body: NewUser, user: User = Depends(admin_only), db: Session = Depends(get_db)):
     if db.scalar(select(User.id).where(func.lower(User.email) == body.email.lower())):
         raise HTTPException(409, "Email already registered")
+    allowed = get_settings().allowed_roles()
+    if allowed and body.role not in allowed:
+        raise HTTPException(400, f"During the pilot only these roles can be created: {', '.join(sorted(allowed))}")
     u = User(org_id=user.org_id, email=body.email.lower(), full_name=body.full_name, role=body.role,
              company=body.company, password_hash=hash_password(body.password))
     db.add(u)
@@ -103,7 +107,60 @@ def integrations(user: User = Depends(admin_only), db: Session = Depends(get_db)
             "jobs_by_source": counts, "nightly": {"enabled": s.JOB_SYNC_ENABLED, "hour_utc": s.JOB_SYNC_HOUR_UTC,
                                                   "location": s.JOB_SYNC_LOCATION, "expire_days": s.JOB_EXPIRE_DAYS},
             "runs": [_run_out(r) for r in runs],
-            "ai": {"enabled": ai.enabled(), "model": s.AI_MODEL}, "nebula": {"enabled": nebula.enabled()}}
+            "ai": {"enabled": ai.enabled(), "model": s.AI_MODEL}, "nebula": {"enabled": nebula.enabled()},
+            "institution": _institution_status(db, user)}
+
+
+def _institution_status(db: Session, user: User) -> dict:
+    """Single sign-on, Canvas, Canvas Credentials, Open Badges and Handshake: what is configured and in use."""
+    from ..config import get_settings
+    from ..integrations import canvas, credentials, handshake, openbadges, sso
+    from ..models import CanvasConnection, Job, SkillBadge, Syllabus, UserIdentity
+
+    s = get_settings()
+    org_users = select(User.id).where(User.org_id == user.org_id)
+    n = lambda q: db.scalar(select(func.count()).select_from(q.subquery()))  # noqa: E731
+    return {
+        "sso": {"enabled": sso.enabled(), "name": s.SSO_PROVIDER_NAME, "issuer": s.SSO_ISSUER or None, "required": s.SSO_REQUIRED,
+                "domains": sorted(sso.domains()), "auto_provision": s.SSO_AUTO_PROVISION, "redirect_uri": sso.redirect_uri(),
+                "linked_accounts": n(select(UserIdentity.id).where(UserIdentity.user_id.in_(org_users)))},
+        "canvas": {"enabled": canvas.enabled(), "base_url": s.CANVAS_BASE_URL or None, "redirect_uri": canvas.redirect_uri(),
+                   "connected_faculty": n(select(CanvasConnection.user_id).where(CanvasConnection.user_id.in_(org_users))),
+                   "imported_courses": n(select(Syllabus.id).where(Syllabus.org_id == user.org_id, Syllabus.canvas_course_id.is_not(None)))},
+        "credentials": {"enabled": credentials.enabled(), "base_url": s.CREDENTIALS_BASE_URL, "auto_send": s.CREDENTIALS_AUTO_SEND,
+                        "sent": n(select(SkillBadge.id).where(SkillBadge.org_id == user.org_id, SkillBadge.credentials_assertion_id.is_not(None))),
+                        "waiting": n(select(SkillBadge.id).where(SkillBadge.org_id == user.org_id, SkillBadge.public, SkillBadge.status == "active",
+                                                                  SkillBadge.credentials_assertion_id.is_(None))),
+                        "errors": n(select(SkillBadge.id).where(SkillBadge.org_id == user.org_id, SkillBadge.credentials_error.is_not(None)))},
+        "open_badges": openbadges.status() | {"jwks_url": f"{openbadges.base()}/api/public/ob/jwks.json",
+                                              "issuer_url": f"{openbadges.base()}/api/public/ob/issuers/{user.org_id}",
+                                              "linkedin_org_id": s.LINKEDIN_ORG_ID or None},
+        "handshake": {"feed": handshake.feed_enabled(),
+                      "open_postings": n(select(Job.id).where(Job.source == handshake.SOURCE, Job.org_id == user.org_id, Job.is_open)),
+                      "closed_postings": n(select(Job.id).where(Job.source == handshake.SOURCE, Job.org_id == user.org_id, ~Job.is_open))},
+    }
+
+
+@router.post("/handshake/import")
+async def handshake_import(file: UploadFile = File(...), user: User = Depends(admin_only), db: Session = Depends(get_db)):
+    """Import a Handshake jobs export (CSV, XLSX or JSON). It replaces the previous snapshot: postings no longer in it close."""
+    from ..integrations import handshake
+
+    name = (file.filename or "").lower()
+    if not name.endswith((".csv", ".xlsx", ".xlsm", ".json")):
+        raise HTTPException(400, "Upload the Handshake export as CSV, Excel (.xlsx) or JSON")
+    raw = await file.read(20_000_001)
+    if len(raw) > 20_000_000:
+        raise HTTPException(413, "The file is larger than 20 MB")
+    try:
+        result = handshake.import_file(db, user.org_id, name, raw)
+    except handshake.HandshakeError as e:
+        raise HTTPException(400, str(e))
+    except (UnicodeDecodeError, ValueError, KeyError) as e:
+        raise HTTPException(400, f"Could not read the file ({type(e).__name__})")
+    audit(db, user, "handshake.import", **{k: v for k, v in result.items() if isinstance(v, int)})
+    db.commit()
+    return result
 
 
 def _manual_sync(run_id: int) -> None:

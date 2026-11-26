@@ -172,11 +172,18 @@ def review(eid: str, body: ReviewIn, user: User = Depends(reviewer), db: Session
             sc.status = "completed"
         else:
             db.add(StudentCourse(user_id=e.student_id, course_id=e.course_id, status="completed", term=e.issued_on))
+    db.flush()
+    badges_issued = 0
+    if body.decision == "verified" and e.kind == "course":
+        from ..services import badges as badgesvc
+
+        badges_issued = badgesvc.sync(db, e.org_id, e.student_id)
     audit(db, user, f"evidence.{body.decision}", title=e.title, student=e.student.email, bonus=e.bonus_points)
     if body.decision == "verified":
         notify(db, e.student, "evidence.verified", f"Verified: {e.title}",
                f"{user.full_name} verified your {e.kind}. Its skills now count fully in CometMatch"
-               + (f", and it adds +{e.bonus_points} bonus points to jobs that need them." if e.bonus_points else "."), "/match")
+               + (f", and it adds +{e.bonus_points} bonus points to jobs that need them." if e.bonus_points else ".")
+               + (f" You earned {badges_issued} faculty-verified skill badge{'s' if badges_issued != 1 else ''}." if badges_issued else ""), "/match")
     else:
         notify(db, e.student, "evidence.rejected", f"Not verified: {e.title}",
                f"{user.full_name} could not verify this item: {body.note}", "/match")

@@ -32,6 +32,7 @@ def configured_sources() -> dict[str, dict]:
         "github": {"enabled": True, "detail": "SimplifyJobs new-grad & internship lists (free, US roles)"},
         "adzuna": {"enabled": bool(s.ADZUNA_APP_ID and s.ADZUNA_APP_KEY), "detail": "Adzuna API — set ADZUNA_APP_ID and ADZUNA_APP_KEY"},
         "usajobs": {"enabled": bool(s.USAJOBS_API_KEY and s.USAJOBS_EMAIL), "detail": "USAJobs API — set USAJOBS_API_KEY and USAJOBS_EMAIL"},
+        "handshake": {"enabled": bool(s.HANDSHAKE_FEED_URL), "detail": "Handshake jobs export — upload it below, or set HANDSHAKE_FEED_URL for a nightly pull"},
     }
 
 
@@ -62,6 +63,18 @@ def run_sync(db: Session, run: SyncRun) -> SyncRun:
             results[name] = {"skipped": True}
             continue
         enabled += 1
+        if name == "handshake":
+            from ..integrations import handshake
+
+            try:
+                org_id = handshake.home_org_id(db)
+                results[name] = handshake.pull_feed(db, org_id) if org_id else {"error": "No organization"}
+            except Exception as e:
+                db.rollback()
+                failures += 1
+                results[name] = {"error": f"{type(e).__name__}: {e}"[:300]}
+                log.warning("Handshake feed failed: %s", e)
+            continue
         try:
             rows = _fetch(name)
             added = sum(1 for r in rows if jobsvc.upsert_job(db, r))

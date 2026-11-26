@@ -1,0 +1,50 @@
+# Render Blueprint: SEPARATE faculty-only pilot environment for CometIQ (docs/PILOT-DEPLOY.md).
+# It has its own database, secrets and URL, and shares nothing with the demo or a future production deployment.
+# Render dashboard → New → Blueprint → this repository → Blueprint path: render.pilot.yaml.
+# The form asks for two values only: the pilot administrator's email and password. Everything else is generated
+# or derived (the public URL comes from Render; the Open Badges signing key is created on first use and stored
+# encrypted in the database). Integrations and email are added later under the service's Environment tab.
+databases:
+  - name: cometiq-pilot-db
+    plan: basic-256mb              # paid: daily backups with point-in-time recovery (the restore drill needs them)
+    databaseName: cometiq_pilot
+    user: cometiq_pilot
+
+services:
+  - type: web
+    name: cometiq-pilot
+    runtime: docker
+    plan: starter
+    branch: main
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: false              # the pilot only changes when someone deploys a reviewed release on purpose
+    envVars:
+      - key: ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase: { name: cometiq-pilot-db, property: connectionString }
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SECRETS_KEY              # encrypts stored Canvas tokens and the badge signing key; never change it
+        generateValue: true
+      - key: SEED_DEMO
+        value: "false"             # no demo accounts, no fictional postings
+      - key: PILOT_ROLES
+        value: admin,faculty       # students, advisors and employers can't register or sign in
+      - key: ORG_NAME
+        value: The University of Texas at Dallas
+      - key: BOOTSTRAP_ADMIN_EMAIL
+        sync: false                # the pilot administrator's UTD address
+      - key: BOOTSTRAP_ADMIN_PASSWORD
+        sync: false                # 12+ characters; change it after the first sign-in
+      - key: WEB_CONCURRENCY
+        value: "1"                 # one worker fits the Starter plan's memory; raise it with a larger plan
+      - key: JOB_SYNC_ENABLED
+        value: "false"             # the pilot uses documented, frozen job samples; sync only on purpose
+      - key: AI_DAILY_LIMIT_PER_ORG
+        value: "200"
+      - key: EMAIL_PROVIDER
+        value: log                 # switch to resend (with RESEND_API_KEY and EMAIL_FROM) to send password-reset emails
+      - key: LOG_FORMAT
+        value: json
