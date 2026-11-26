@@ -13,15 +13,13 @@ import base64
 import hashlib
 import secrets
 import time
-from datetime import datetime, timezone
 from urllib.parse import urlencode
 
 import jwt
-from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..models import Organization, StudentProfile, User, UserIdentity
+from ..models import User
 from . import http
 
 COOKIE = "cometiq_sso"
@@ -172,49 +170,16 @@ def profile(claims: dict) -> dict:
             "affiliations": [str(v) for v in values][:10]}
 
 
-def _org(db: Session) -> Organization:
-    slug = get_settings().SSO_ORG_SLUG
-    org = db.scalar(select(Organization).where(Organization.slug == slug)) if slug else None
-    org = org or db.scalar(select(Organization).order_by(Organization.created_at))
-    if not org:
-        raise SSOError("CometIQ is not set up yet")
-    return org
-
-
 def sign_in(db: Session, claims: dict) -> tuple[User, bool]:
     """Returns (user, created)."""
-    from ..routers.auth import _role_allowed
-    from ..security import audit, hash_password
+    from .accounts import AccountError, link_or_create
 
     s, issuer = get_settings(), discovery()["issuer"]
     p = profile(claims)
     if not institutional(p["email"]):
         raise SSOError(f"Sign in with your {', '.join(sorted(domains()))} account")
-    ident = db.scalar(select(UserIdentity).where(UserIdentity.provider == issuer, UserIdentity.subject == str(claims["sub"])))
-    user = db.get(User, ident.user_id) if ident else None
-    created = False
-    if user is None:
-        user = db.scalar(select(User).where(func.lower(User.email) == p["email"]))
-    if user is None:
-        if not s.SSO_AUTO_PROVISION:
-            raise SSOError("You don't have a CometIQ account yet. Ask your administrator to add you.")
-        if not _role_allowed(p["role"]):
-            raise SSOError("This CometIQ pilot is not open to your role yet")
-        user = User(org_id=_org(db).id, email=p["email"], full_name=p["name"], role=p["role"],
-                    password_hash="!sso:" + hash_password(secrets.token_urlsafe(24)))   # no usable password
-        db.add(user)
-        db.flush()
-        if user.role == "student":
-            db.add(StudentProfile(user_id=user.id))
-        created = True
-    if not user.is_active:
-        raise SSOError("This account is disabled")
-    if not _role_allowed(user.role):
-        raise SSOError("This CometIQ pilot is currently open to faculty only")
-    now = datetime.now(timezone.utc)
-    if ident is None:
-        ident = UserIdentity(user_id=user.id, provider=issuer, subject=str(claims["sub"]))
-        db.add(ident)
-    ident.netid, ident.email, ident.last_login_at = p["netid"], p["email"], now
-    audit(db, user, "login.sso", created=created, netid=p["netid"])
-    return user, created
+    try:
+        return link_or_create(db, provider=issuer, subject=str(claims["sub"]), email=p["email"], name=p["name"], role=p["role"],
+                              netid=p["netid"], auto_provision=s.SSO_AUTO_PROVISION, action="login.sso")
+    except AccountError as e:
+        raise SSOError(str(e)) from None

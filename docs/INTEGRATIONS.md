@@ -9,12 +9,13 @@ Five integrations. Each is off until it is configured, and each can be set up on
 | [Canvas Credentials](#3-canvas-credentials-badges-in-canvas) | Faculty-verified badges appear in students' Canvas Backpack. | Canvas Credentials issuer admin |
 | [Open Badges 3.0 and LinkedIn](#4-open-badges-30-and-linkedin) | Every badge is a signed, verifiable credential with an "Add to LinkedIn" link. | CometIQ operator (a signing key) |
 | [Handshake](#5-handshake) | The career center's postings feed the job market that CometIQ analyzes. | Career center |
+| [CometIQ inside Canvas](#6-cometiq-inside-canvas-lti-13) | A "CometIQ skills" page in every course menu, already signed in. | Canvas administrators |
 
 All settings are environment variables on the server; see `.env.example`. The admin page **Organization → Integrations** shows what is configured, the redirect URIs to register, and how much each integration is used.
 
 ![Admin integrations page](integrations/07-admin-integrations.png)
 
-To try every flow without real credentials, run the local stand-ins in `backend/scripts/fake_institution.py`. They provide an identity provider, Canvas and Canvas Credentials. The script's docstring lists the settings to use. These stand-ins are for development only.
+To try every flow without real credentials, run the local stand-ins in `backend/scripts/fake_institution.py`. They provide an identity provider, Canvas (including a course page that launches CometIQ in a frame) and Canvas Credentials. The script's docstring lists the settings to use. These stand-ins are for development only.
 
 ---
 
@@ -104,6 +105,19 @@ SECRETS_KEY=<32+ random characters>
 - Deleting the CometIQ account removes the connection.
 - The tokens are never included in data exports.
 
+**Scoring with graded work** (scoring method 2026.12). When a course is imported from Canvas, the grade decides:
+
+| Status | Rule |
+|---|---|
+| Covered | The skill carries at least **5% of the course grade**. |
+| Partial | The skill is graded below 5%, or only mentioned in the syllabus. |
+| Missing | Neither graded nor mentioned. |
+
+- **How weight is assigned:** a rubric criterion that names a skill gives it that criterion's points. An assignment whose instructions name it gives it the assignment's points.
+- **On the report:** the score is labeled "grade-weighted". Each skill shows its share of the grade and the assignments behind it.
+- **Other courses:** syllabi without Canvas data score exactly as before (method 2026.11).
+- **Older reports:** they stay reproducible under the method they used. The semester comparison shows any change of method as a separate "method update".
+
 | Canvas courses in CometGap | Graded work on the report |
 |---|---|
 | ![Canvas courses](integrations/03-canvas-courses.png) | ![Graded work from Canvas](integrations/04-graded-work.png) |
@@ -187,11 +201,61 @@ Rows without an id or a title are skipped and reported. Postings without a URL l
 
 Handshake postings belong to the institution: they appear in students' matches and in the job market that faculty compare syllabi against.
 
+## 6. CometIQ inside Canvas (LTI 1.3)
+
+CometIQ can add a **"CometIQ skills"** item to every course's menu in Canvas. The page opens inside Canvas, already signed in. No separate account or password is needed.
+
+**Faculty see:**
+- the skills their course builds, with the grade-weighted coverage score;
+- the top gaps;
+- how many skills faculty have reviewed;
+- a button to analyze or re-import the course.
+
+**Students see:**
+- which skills the course builds;
+- how often employers ask for each one;
+- the graded assignments where they practice it;
+- their badges from the course.
+
+**Canvas administrators create an LTI 1.3 developer key:**
+1. Go to Admin → Developer Keys → **+ LTI Key** → Method: **Enter URL**.
+2. Enter `https://<cometiq-host>/api/lti/config.json`. That file sets:
+   - the course-navigation placement;
+   - privacy level Public, so CometIQ receives the name and email;
+   - the custom field `canvas_course_id=$Canvas.course.id`.
+3. Turn the key **On**, then install it at the account (or sub-account) level with its client id.
+
+```
+LTI_ENABLED=true
+LTI_CLIENT_ID=<the LTI key's client id>
+LTI_DEPLOYMENT_IDS=<deployment id(s), optional>
+LTI_FRAME_ANCESTORS=https://*.instructure.com
+```
+
+`LTI_FRAME_ANCESTORS` lists who may show CometIQ in a frame; add your vanity Canvas domain if you use one. `LTI_ISSUER`, `LTI_AUTH_URL` and `LTI_JWKS_URL` default to Instructure-hosted Canvas. Self-hosted Canvas sets its own.
+
+**Launch security:**
+- **The launch token is checked** against Canvas's published keys: issuer, audience, expiry, version, message type, and deployment if listed.
+- **Each launch works once.** Nonces are stored, so a launch can't be replayed.
+- **State is signed, not a cookie.** It travels as a signed token because browsers block third-party cookies inside the Canvas frame.
+
+**Roles from Canvas:**
+- Instructor and teaching assistant → faculty.
+- Learner → student.
+- A Canvas admin role never grants admin in CometIQ.
+- People are matched to existing accounts the same way as with single sign-on.
+
+**Framing.** Only the in-Canvas pages may be framed, and only by the origins in `LTI_FRAME_ANCESTORS`. Every other CometIQ page refuses framing. Links to full reports open in a new tab.
+
+| Instructor view inside Canvas (local stand-in) | Student view |
+|---|---|
+| ![Instructor in Canvas](integrations/09-canvas-instructor.png) | ![Student in Canvas](integrations/10-canvas-student.png) |
+
 ---
 
 ## Testing
 
-`backend/tests/test_institution.py` runs every integration against in-process fakes of the real services. There are 22 tests:
+`backend/tests/test_institution.py` and `backend/tests/test_lti.py` run every integration against in-process fakes of the real services. There are 36 tests:
 
 - **Single sign-on:**
   - first sign-in creates the account;
@@ -219,6 +283,13 @@ Handshake postings belong to the institution: they appear in students' matches a
   - tampered, forged and malformed credentials are rejected;
   - revocation is reflected at once;
   - the LinkedIn link appears only for shared badges.
+- **CometIQ inside Canvas:**
+  - the tool configuration;
+  - instructor and student launches;
+  - replays are refused;
+  - each bad launch is refused: audience, nonce, forged signature, expiry, version, missing course id, wrong domain, deployment, forged state;
+  - the admin role is never granted;
+  - the framing rules.
 - **Handshake:**
   - CSV, Excel and JSON;
   - snapshot semantics: add, update, close, reopen and expire;

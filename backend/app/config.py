@@ -122,6 +122,15 @@ class Settings(BaseSettings):
     CANVAS_CLIENT_ID: str = ""
     CANVAS_CLIENT_SECRET: str = ""
     CANVAS_SCOPES: str = ""            # only if the developer key enforces scopes (space-separated, see docs/INTEGRATIONS.md)
+    # CometIQ inside Canvas (LTI 1.3). Canvas cloud defaults; the client id is the LTI developer key's id.
+    LTI_ENABLED: bool = False
+    LTI_CLIENT_ID: str = ""
+    LTI_ISSUER: str = "https://canvas.instructure.com"
+    LTI_AUTH_URL: str = "https://sso.canvaslms.com/api/lti/authorize_redirect"
+    LTI_JWKS_URL: str = "https://sso.canvaslms.com/api/lti/security/jwks"
+    LTI_DEPLOYMENT_IDS: str = ""        # comma-separated; empty = any deployment of this developer key
+    LTI_AUTO_PROVISION: bool = True
+    LTI_FRAME_ANCESTORS: str = "https://*.instructure.com"   # who may show CometIQ's in-Canvas pages in a frame
     # Canvas Credentials (Badgr) for sending verified badges back into Canvas
     CREDENTIALS_BASE_URL: str = "https://api.badgr.io"
     CREDENTIALS_TOKEN: str = ""

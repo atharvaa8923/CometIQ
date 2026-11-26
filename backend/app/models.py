@@ -703,6 +703,45 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+# ── Assurance of learning (AACSB) ──────────────────────────────────────────────
+class ProgramGoal(Base):
+    """A program competency goal (AACSB Standard 5 "learning goal"), mapped to the skills that show it."""
+    __tablename__ = "program_goals"
+    __table_args__ = (UniqueConstraint("program_id", "code"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    program_id: Mapped[str] = mapped_column(ForeignKey("programs.id", ondelete="CASCADE"), index=True)
+    code: Mapped[str] = mapped_column(String(20))                 # e.g. LG1
+    title: Mapped[str] = mapped_column(String(300))
+    description: Mapped[str | None] = mapped_column(Text)
+    skill_ids: Mapped[list] = mapped_column(JSON, default=list)
+    target_pct: Mapped[int] = mapped_column(Integer, default=80)  # % of students expected to meet or exceed expectations
+    created_by: Mapped[str | None] = mapped_column(String(32))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+class AssessmentResult(Base):
+    """One assessment of a goal in one term: how many students were assessed and how many met expectations,
+    plus what faculty decided to do about it (closing the loop)."""
+    __tablename__ = "assessment_results"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    goal_id: Mapped[str] = mapped_column(ForeignKey("program_goals.id", ondelete="CASCADE"), index=True)
+    term: Mapped[str] = mapped_column(String(40))
+    course_code: Mapped[str | None] = mapped_column(String(30))
+    measure: Mapped[str] = mapped_column(String(300))             # e.g. "Project 1 rubric: data preparation"
+    measure_type: Mapped[str] = mapped_column(String(20), default="direct")   # direct | indirect
+    students_assessed: Mapped[int] = mapped_column(Integer)
+    students_meeting: Mapped[int] = mapped_column(Integer)
+    target_pct: Mapped[int] = mapped_column(Integer, default=80)
+    notes: Mapped[str | None] = mapped_column(Text)
+    action: Mapped[str | None] = mapped_column(Text)               # closing-the-loop action
+    entered_by: Mapped[str | None] = mapped_column(String(32))
+    entered_by_name: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 # ── Integrations ───────────────────────────────────────────────────────────────
 class UserIdentity(Base):
     """An external sign-in linked to a CometIQ account (single sign-on). The subject is the identity provider's stable id."""
@@ -748,6 +787,13 @@ class CourseAssignment(Base):
     skills: Mapped[list] = mapped_column(JSON, default=list)      # skill names found in the instructions or rubric
     graded: Mapped[bool] = mapped_column(Boolean, default=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+class LtiNonce(Base):
+    """Nonces of LTI launches already used (a launch token works once). Kept for a day."""
+    __tablename__ = "lti_nonces"
+    nonce: Mapped[str] = mapped_column(String(120), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
 
 
 class CredentialBadgeClass(Base):
@@ -837,6 +883,10 @@ _CHECKS = [
     (GapDecision, "decision", _in("decision", "add_here", "covered_elsewhere", "defer", "out_of_scope")),
     (GapDecision, "status", _in("status", "open", "drafted", "implemented", "superseded")),
     (CurriculumProposal, "status", _in("status", "draft", "in_review", "changes_requested", "approved", "adopted", "withdrawn")),
+    (ProgramGoal, "target_pct", "target_pct BETWEEN 1 AND 100"),
+    (AssessmentResult, "measure_type", _in("measure_type", "direct", "indirect")),
+    (AssessmentResult, "students_meeting", "students_meeting >= 0 AND students_meeting <= students_assessed"),
+    (AssessmentResult, "target_pct", "target_pct BETWEEN 1 AND 100"),
     (CurriculumProposal, "required_approvals", "required_approvals >= 1"),
     (ProposalReview, "vote", _in("vote", "approve", "request_changes")),
     (CurriculumMapEntry, "level", _in("level", "I", "P", "M", "-")),

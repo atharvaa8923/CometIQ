@@ -185,7 +185,7 @@ def get_analysis(aid: str, user: User = Depends(faculty), db: Session = Depends(
     reviews = {rv.skill_id: rv for rv in db.scalars(select(GapReview).where(GapReview.analysis_id == ga.id))}
     return {"id": ga.id, "syllabus": {"id": s.id, "title": s.title, "code": s.code, "semester": s.semester,
                                       "pilot_approved": s.pilot_approved, "approved_by": s.approved_by},
-            "score": ga.score, "target": ga.target, "job_count": ga.job_count, "engine": ga.engine,
+            "score": ga.score, "scoring_version": ga.scoring_version, "target": ga.target, "job_count": ga.job_count, "engine": ga.engine,
             "sample_id": ga.sample_id if ga.sample_id and (smp := db.get(JobSample, ga.sample_id)) and smp.kind != "auto" else None,
             "inputs": vs.describe_inputs(db, ga),
             "decisions": {str(k): decsvc.out(v) for k, v in decsvc.active_for(db, s.id).items()},

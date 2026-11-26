@@ -525,7 +525,7 @@ The 42 tables, grouped by purpose:
 
 ## 10. Testing and quality
 
-- **117 automated tests** cover every module, role permissions, migrations (upgrade with existing data and downgrade), privacy and
+- **135 automated tests** cover every module, role permissions, migrations (upgrade with existing data and downgrade), privacy and
   erasure, versioning and reproducibility, decisions, proposals, the curriculum map, badges and outcomes, search, retention, the
   error format, rate limits, concurrent submissions, and the university integrations (single sign-on, Canvas, Canvas
   Credentials, Open Badges, Handshake) against in-process fakes of the real services. They pass on **SQLite and PostgreSQL 16**.
@@ -600,10 +600,11 @@ cometiq/
 | **9. Management, design and partnerships** | Dean's program scorecard, syllabus copilot, program simulator, skill stacks with employer alerts, employer-sponsored projects with partner badges, and Ask CometIQ (LangGraph agent with citations). |
 | **10. Backend performance and hardening** | Batch loading and cached views (candidate ranking from 4,968 queries to 12); PostgreSQL by default, with constraints, indexes, pool and query timeouts, full-text search and daily retention; property tests; safe concurrent decisions, idempotency keys and a SKIP LOCKED task queue; one error format; per-user rate limits; several worker processes; a load test, 18 → 104 requests/s. |
 | **11. University systems** | UTD NetID single sign-on (OpenID Connect), Canvas import of syllabi and graded assignments with rubrics, faculty-verified badges sent to Canvas Credentials, signed Open Badges 3.0 credentials with public verification and an Add to LinkedIn link, Handshake job postings. Setup guide: [docs/INTEGRATIONS.md](../INTEGRATIONS.md). |
+| **12. Canvas, grading and accreditation** | CometIQ inside Canvas (LTI 1.3 course page for faculty and students), grade-weighted gap scores from Canvas assignments and rubrics (scoring method 2026.12), and the AACSB assurance-of-learning report with competency goals, direct measures, results and closing the loop ([docs/AACSB-REPORT.md](../AACSB-REPORT.md)). |
 
-On GitHub, rounds 1–5 are on `main`. Rounds 6–11 are on the branches `faculty-review-pilot`, `decision-records-and-versions`,
-`curriculum-proposals-and-badges`, `scorecard-copilot-simulator-stacks-projects-ask`, `backend-performance` and `integrations`.
-Each branch builds on the previous one, so merging the last one brings in all six.
+On GitHub, rounds 1–5 are on `main`. Rounds 6–12 are on the branches `faculty-review-pilot`, `decision-records-and-versions`,
+`curriculum-proposals-and-badges`, `scorecard-copilot-simulator-stacks-projects-ask`, `backend-performance`, `integrations` and
+`canvas-lti-aacsb`. Each branch builds on the previous one, so merging the last one brings in all seven.
 
 ---
 

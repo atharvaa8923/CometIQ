@@ -158,3 +158,40 @@ def test_simulator_coverage_bounds(data):
     assert 0.0 <= m["coverage"] <= 100.0
     market = sum(s["in_market"] for s in skills)
     assert 0 <= m["never_practiced"] <= m["no_mastery"] <= market
+
+
+# ── Graded-work weighting (scoring 2026.12) ───────────────────────────────────
+@st.composite
+def assignments(draw):
+    out = []
+    for i in range(draw(st.integers(0, 8))):
+        crits = draw(st.lists(st.fixed_dictionaries({"criterion": st.sampled_from(["SQL queries", "Python cleaning", "Tableau charts", "Writing", "Excel model"]),
+                                                     "detail": st.just(""), "points": st.integers(0, 40)}), max_size=4))
+        out.append({"name": f"A{i}", "points": draw(st.integers(0, 200)), "graded": draw(st.booleans()), "rubric": crits,
+                    "skills": draw(st.lists(st.sampled_from(["SQL", "Python", "Tableau", "Excel", "R"]), unique=True, max_size=3))})
+    return out
+
+
+@MANY
+@given(assignments())
+def test_graded_shares_are_fractions_of_the_grade(rows):
+    w = vs.graded_weights(rows)
+    total = sum(r["points"] for r in rows if r["graded"] and r["points"] > 0)
+    for name, g in w.items():
+        assert 0.0 < g["share"] <= 1.0 and g["points"] <= total + 1e-6
+        assert len(g["assignments"]) == len(set(g["assignments"]))     # an assignment counts once per skill
+    if not total:
+        assert w == {}
+
+
+@MANY
+@given(syllabus_skills(), topics, demand_lists(), st.integers(1, 40), st.data())
+def test_graded_scorer_bounds_and_compatibility(skills, tps, demand, top_n, data):
+    _, plain = vs.SCORERS["2026.11"](skills, tps, demand, top_n)
+    assert vs.SCORERS["2026.12"](skills, tps, demand, top_n)[1] == plain          # no graded work: unchanged
+    graded = {k: {**v, "graded": {"share": data.draw(st.floats(0, 1, allow_nan=False)), "assignments": []}} for k, v in skills.items()}
+    rows, score = vs.SCORERS["2026.12"](graded, tps, demand, top_n)
+    assert 0.0 <= score <= 100.0
+    for r in rows:
+        share = (graded.get(r["name"]) or {}).get("graded", {}).get("share", 0)
+        assert (r["status"] == "covered") == (share >= vs.GRADED_SHARE)

@@ -1,4 +1,4 @@
-import { Download, FlaskConical, Gauge, GitPullRequest, Grid3x3, Layers, LineChart } from "lucide-react";
+import { ClipboardCheck, Download, FlaskConical, Gauge, GitPullRequest, Grid3x3, Layers, LineChart } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Badge, Card, Empty, Field, Modal, PageHeader, Spinner, Stat, Tabs } from "../../components/ui";
@@ -6,6 +6,7 @@ import { api, download } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { useApi } from "../../lib/hooks";
 import { TargetSelect } from "../gap/GapHome";
+import Aol from "./Aol";
 import Scorecard from "./Scorecard";
 import Simulator from "./Simulator";
 import StacksAdmin from "./StacksAdmin";
@@ -22,7 +23,7 @@ export const PSTATUS: Record<string, { label: string; color: string }> = {
 
 export default function CurriculumHome() {
   const [params, setParams] = useSearchParams();
-  const tab = (params.get("tab") as "scorecard" | "proposals" | "map" | "simulator" | "stacks" | "outcomes") ?? "scorecard";
+  const tab = (params.get("tab") as "scorecard" | "proposals" | "map" | "aacsb" | "simulator" | "stacks" | "outcomes") ?? "scorecard";
   return (
     <div>
       <PageHeader icon={<GitPullRequest className="h-5 w-5" />} title="Curriculum" subtitle="Program scorecard, proposals, the curriculum map and outcomes of implemented changes" />
@@ -30,12 +31,14 @@ export default function CurriculumHome() {
         { id: "scorecard", label: <span className="inline-flex items-center gap-1.5"><Gauge className="h-4 w-4" aria-hidden />Program scorecard</span> },
         { id: "proposals", label: <span className="inline-flex items-center gap-1.5"><GitPullRequest className="h-4 w-4" aria-hidden />Proposals</span> },
         { id: "map", label: <span className="inline-flex items-center gap-1.5"><Grid3x3 className="h-4 w-4" aria-hidden />Curriculum map</span> },
+        { id: "aacsb", label: <span className="inline-flex items-center gap-1.5"><ClipboardCheck className="h-4 w-4" aria-hidden />AACSB report</span> },
         { id: "simulator", label: <span className="inline-flex items-center gap-1.5"><FlaskConical className="h-4 w-4" aria-hidden />Program simulator</span> },
         { id: "stacks", label: <span className="inline-flex items-center gap-1.5"><Layers className="h-4 w-4" aria-hidden />Skill stacks</span> },
         { id: "outcomes", label: <span className="inline-flex items-center gap-1.5"><LineChart className="h-4 w-4" aria-hidden />Outcomes</span> }]} />
       {tab === "scorecard" && <Scorecard />}
       {tab === "proposals" && <Proposals />}
       {tab === "map" && <CurriculumMap />}
+      {tab === "aacsb" && <Aol />}
       {tab === "simulator" && <Simulator />}
       {tab === "stacks" && <StacksAdmin />}
       {tab === "outcomes" && <Outcomes />}

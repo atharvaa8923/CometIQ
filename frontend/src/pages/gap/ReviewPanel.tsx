@@ -8,7 +8,7 @@ import { PRIORITY_COLOR, StatusTag, type Status } from "../../lib/viz";
 export interface EvidenceRow {
   skill_id: number; name: string; category: string; demand: number; job_count: number; required_count?: number; preferred_count?: number;
   sources?: Record<string, number>; first_posted?: string | null; last_posted?: string | null;
-  status: Status; priority: string; mentions: number; excerpts?: string[]; evidence: string | null; in_schedule?: boolean; taught_in?: string[];
+  status: Status; priority: string; mentions: number; excerpts?: string[]; graded_share?: number; graded_in?: string[]; evidence: string | null; in_schedule?: boolean; taught_in?: string[];
 }
 export interface Review {
   skill_id: number; system_status: Status; faculty_status: string; decision: "confirmed" | "corrected"; rationale: string | null;
@@ -54,7 +54,9 @@ export function ReviewPanel({ analysisId, syllabusId, rows, jobCount, reviews, s
           <button key={k} className={`btn-sm ${filter === k ? "btn-primary" : "btn-ghost"}`} aria-pressed={filter === k} onClick={() => setFilter(k)}>{l}</button>))}
       </div>}>
       <p className="mb-3 text-sm text-slate-600">
-        The system signal comes from <b>keyword mentions</b> in the syllabus. It is a way to prioritize review, not a finding.
+        {rows.some((r) => r.graded_share !== undefined)
+          ? <>The system signal comes from <b>graded work in Canvas</b>: a skill carrying at least 5% of the course grade counts as practiced; one that is only mentioned counts as partial.</>
+          : <>The system signal comes from <b>keyword mentions</b> in the syllabus.</>} It is a way to prioritize review, not a finding.
         For each skill, decide whether students actually <b>practice or demonstrate</b> it. A correction needs a short rationale,
         which is saved with your name.
       </p>
@@ -141,6 +143,13 @@ function ReviewEditor({ analysisId, row, jobCount, rv, statuses, reviews, onSave
             : <p className="rounded bg-white px-3 py-1.5 text-slate-500">No mention of {row.name} (or its aliases) was found in the syllabus text.</p>}
           <p className="mt-1 text-xs text-slate-500">{row.mentions} keyword mention{row.mentions === 1 ? "" : "s"}{row.in_schedule ? " · named in the weekly schedule" : ""}</p>
         </div>
+        {row.graded_share !== undefined && <div>
+          <div className="label">Graded work (Canvas)</div>
+          {row.graded_share > 0
+            ? <p className="text-slate-700"><b>{Math.round(row.graded_share * 100)}%</b> of the course grade practices {row.name}
+                {row.graded_in?.length ? <>: {row.graded_in.join(", ")}</> : null}.</p>
+            : <p className="text-slate-700">No graded assignment or rubric criterion practices {row.name}.</p>}
+        </div>}
         <div>
           <div className="label">Job-market evidence</div>
           <p className="text-slate-700"><b>{row.job_count}</b> of <b>{jobCount}</b> sampled postings request {row.name}
@@ -151,7 +160,7 @@ function ReviewEditor({ analysisId, row, jobCount, rv, statuses, reviews, onSave
         </div>
       </div>
       <div className="space-y-3">
-        <div className="text-sm text-slate-600">System signal (mentions): <StatusTag s={row.status} /></div>
+        <div className="text-sm text-slate-600">System signal ({row.graded_share !== undefined ? "graded work" : "mentions"}): <StatusTag s={row.status} /></div>
         <div>
           <label className="label" htmlFor={`${id}-fs`}>Your classification</label>
           <select id={`${id}-fs`} className="input" value={fs} onChange={(e) => setFs(e.target.value)}>

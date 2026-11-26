@@ -287,6 +287,10 @@ def import_course(db: Session, user: User, cid: str, task=None) -> dict:
     for k, row in existing.items():
         if k not in seen:
             db.delete(row)
+    db.flush()
+    if not changed and not created:   # same text, but grading may have changed (points, rubrics): that is a new version too
+        last = vs.latest_version(db, syl.id)
+        changed = bool(last and last.skills != vs.skills_snapshot(syl))
     db.commit()
     result = {"syllabus_id": syl.id, "created": created, "changed": bool(changed), "assignments": len(assignments),
               "graded_assignments": sum(a["graded"] for a in assignments), "course_code": syl.code, "semester": syl.semester}

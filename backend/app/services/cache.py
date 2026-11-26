@@ -15,9 +15,9 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..db import SessionLocal, engine
-from ..models import AiUsage, AuditLog, CacheVersion, IdempotencyKey, Notification, PasswordReset, SyncRun, Task
+from ..models import AiUsage, AuditLog, CacheVersion, IdempotencyKey, LtiNonce, Notification, PasswordReset, SyncRun, Task
 
-IGNORED = (Task, AuditLog, Notification, AiUsage, CacheVersion, PasswordReset, SyncRun, IdempotencyKey)
+IGNORED = (Task, AuditLog, Notification, AiUsage, CacheVersion, PasswordReset, SyncRun, IdempotencyKey, LtiNonce)
 _lock = threading.Lock()
 _store: "OrderedDict[tuple, tuple[float, Any]]" = OrderedDict()
 MAX_ENTRIES = 512

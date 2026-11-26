@@ -22,7 +22,7 @@ from ..data.taxonomy import SKILLS
 from ..models import CatalogVersion, Course, GapAnalysis, Job, JobSample, Program, Skill, Syllabus, SyllabusVersion
 
 # Bump when the scoring formula changes, and keep the old function in SCORERS so older reports can still be recomputed.
-SCORING_VERSION = "2026.11"
+SCORING_VERSION = "2026.12"   # 2026.12: graded work counts (Canvas assignments and rubrics); see _score_2026_12
 IMPORTANCE_W = {"required": 1.0, "preferred": 0.5}
 STATUS_W = {"covered": 1.0, "partial": 0.5, "missing": 0.0}
 
@@ -44,9 +44,68 @@ def _day(d) -> str | None:
 
 
 # ── Syllabus versions ──────────────────────────────────────────────────────────
+def graded_weights(assignments: list[dict]) -> dict[str, dict]:
+    """How much of the course grade practices each skill, from graded assignments and their rubrics.
+
+    For each graded assignment worth P points: if rubric criteria name the skill, the skill gets those criteria's points
+    (rescaled so the rubric adds up to P); otherwise, if the assignment's instructions name it, it gets all P points.
+    share = skill points / all graded points (0–1). Each assignment counts at most once per skill.
+    Input: [{"name", "points", "graded", "skills": [...], "rubric": [{"criterion", "detail", "points"}]}].
+    """
+    from .skills import extract_builtin
+
+    graded = [a for a in assignments if a.get("graded") and (a.get("points") or 0) > 0]
+    total = sum(float(a["points"]) for a in graded)
+    out: dict[str, dict] = {}
+    if not total:
+        return out
+    for a in graded:
+        p = float(a["points"])
+        crits = [c for c in (a.get("rubric") or []) if (c.get("points") or 0) > 0]
+        crit_total = sum(float(c["points"]) for c in crits)
+        by_skill: dict[str, float] = {}
+        for c in crits:
+            for name in extract_builtin(f"{c.get('criterion') or ''}\n{c.get('detail') or ''}"):
+                by_skill[name] = by_skill.get(name, 0.0) + float(c["points"]) * p / crit_total
+        for name in a.get("skills") or []:
+            by_skill.setdefault(name, p)
+        for name, pts in by_skill.items():
+            o = out.setdefault(name, {"points": 0.0, "assignments": []})
+            o["points"] += min(pts, p)
+            o["assignments"].append(a["name"])
+    for o in out.values():
+        o["share"] = round(min(1.0, o["points"] / total), 4)
+        o["points"] = round(o["points"], 2)
+    return out
+
+
 def skills_snapshot(syl: Syllabus) -> dict:
-    return {ss.skill.name: {"mentions": ss.mentions, "excerpts": ss.excerpts or ([ss.evidence] if ss.evidence else [])}
+    snap = {ss.skill.name: {"mentions": ss.mentions, "excerpts": ss.excerpts or ([ss.evidence] if ss.evidence else [])}
             for ss in syl.skills}
+    graded = course_graded_weights(syl)
+    if graded is not None:   # graded work is known for this course (imported from Canvas): record it with the version
+        for name, g in graded.items():
+            if name in snap:
+                snap[name]["graded"] = g
+        for v in snap.values():
+            v.setdefault("graded", {"share": 0.0, "points": 0.0, "assignments": []})
+    return snap
+
+
+def course_graded_weights(syl: Syllabus) -> dict | None:
+    """None when the course has no graded assignments on record (then scoring uses mentions only)."""
+    from sqlalchemy.orm import object_session
+
+    from ..models import CourseAssignment
+
+    db = object_session(syl)
+    if db is None or not syl.id:
+        return None
+    rows = list(db.scalars(select(CourseAssignment).where(CourseAssignment.syllabus_id == syl.id)))
+    rows = [{"name": r.name, "points": r.points, "graded": r.graded, "skills": r.skills or [], "rubric": r.rubric or []} for r in rows]
+    if not any(r["graded"] and (r["points"] or 0) > 0 for r in rows):
+        return None
+    return graded_weights(rows)
 
 
 def latest_version(db: Session, syllabus_id: str) -> SyllabusVersion | None:
@@ -172,7 +231,32 @@ def _score_2026_11(skills: dict, topics: list, demand: list[dict], top_n: int) -
     return rows, round(100 * sum(r["demand"] * STATUS_W[r["status"]] for r in rows) / total, 1)
 
 
-SCORERS = {"2026.11": _score_2026_11}
+GRADED_SHARE = 0.05   # a skill carrying at least 5% of the course grade counts as practiced
+
+
+def _score_2026_12(skills: dict, topics: list, demand: list[dict], top_n: int) -> tuple[list[dict], float]:
+    """Like 2026.11, but when the version records graded work (imported from Canvas) the grade decides:
+    covered = the skill carries ≥ 5% of graded points; partial = graded below that, or only mentioned; missing = neither.
+    A skill named twice in the syllabus but never graded is therefore partial, not covered.
+    Syllabi without graded work on record score exactly as in 2026.11."""
+    rows, score = _score_2026_11(skills, topics, demand, top_n)
+    if not any("graded" in v for v in skills.values()):
+        return rows, score
+    for r in rows:
+        g = (skills.get(r["name"]) or {}).get("graded") or {}
+        share = float(g.get("share") or 0.0)
+        r["graded_share"], r["graded_in"] = share, list(g.get("assignments") or [])[:5]
+        if share >= GRADED_SHARE:
+            r["status"] = "covered"
+        elif share > 0 or r["mentions"] > 0:
+            r["status"] = "partial"
+        else:
+            r["status"] = "missing"
+    total = sum(r["demand"] for r in rows) or 1
+    return rows, round(100 * sum(r["demand"] * STATUS_W[r["status"]] for r in rows) / total, 1)
+
+
+SCORERS = {"2026.11": _score_2026_11, "2026.12": _score_2026_12}
 
 
 def score(skills: dict, topics: list, demand: list[dict], top_n: int, version: str | None = None) -> tuple[list[dict], float]:

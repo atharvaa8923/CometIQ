@@ -107,7 +107,8 @@ def test_versions_comparison_reproducibility_and_decisions(client, tokens, monke
     # ── scoring update: method change; old reports stay reproducible ──
     from app.services import versions as vs
 
-    old = vs.SCORERS["2026.11"]
+    current = vs.SCORING_VERSION
+    old = vs.SCORERS[current]
 
     def stricter(skills, topics, demand, top_n):
         rows, sc = old(skills, topics, demand, top_n)
@@ -119,7 +120,7 @@ def test_versions_comparison_reproducibility_and_decisions(client, tokens, monke
     c = client.get(f"/api/gap/compare?a={a3_id}&b={a4_id}", headers=h).json()
     assert c["effects"]["method_update"] < 0 and c["effects"]["course_revision"] == 0 and c["effects"]["demand_change"] == 0
     r3 = client.get(f"/api/gap/analyses/{a3_id}/reproduce", headers=h).json()
-    assert r3["exact"] and r3["scoring_version"] == "2026.11" and r3["current_method_score"] < r3["stored_score"]
+    assert r3["exact"] and r3["scoring_version"] == current and r3["current_method_score"] < r3["stored_score"]
 
     hist = client.get(f"/api/gap/syllabi/{sid}/history", headers=h).json()
     assert [v["version"] for v in hist["versions"]] == [1, 2] and len(hist["reports"]) == 4 and len(hist["steps"]) == 3

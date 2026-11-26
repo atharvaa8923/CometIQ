@@ -276,6 +276,11 @@ def test_canvas_connect_list_and_import(client, tokens, fakes):
     from app.models import CanvasConnection, CourseAssignment, Syllabus, SyllabusVersion
 
     fac, canvas = tokens["faculty"], fakes["canvas.test"]
+    client.delete("/api/canvas/connection", headers=fac)          # other tests may have connected and imported already
+    with SessionLocal() as db:
+        for old in db.scalars(select(Syllabus).where(Syllabus.canvas_course_id == "101")):
+            db.delete(old)
+        db.commit()
     assert client.get("/api/canvas/status", headers=fac).json()["connected"] is False
     assert client.get("/api/canvas/callback?code=canvas-code&state=forged", follow_redirects=False).headers["location"].count("canvas_error") == 1
     _connect_canvas(client, fac)
@@ -306,6 +311,16 @@ def test_canvas_connect_list_and_import(client, tokens, fakes):
         assert "Rubric: Data preparation - Cleans the data with Python (pandas)" in text and "Intro survey" not in text
         assert "<li>" not in text and "- Write SQL queries with joins" in text            # Canvas HTML turned into text
 
+    # scored on graded work: Tableau is the whole graded project; SQL is named in the syllabus but never graded
+    report = client.get(f"/api/gap/analyses/{res['analysis_id']}", headers=fac).json()
+    assert report["score_basis"] == "graded work" and report["scoring_version"] == "2026.12"
+    rows = {r["name"]: r for r in report["skills"]}
+    assert "Tableau" in rows and "SQL" in rows, sorted(rows)
+    if "Tableau" in rows:
+        assert rows["Tableau"]["status"] == "covered" and rows["Tableau"]["graded_share"] == 1.0
+        assert rows["Tableau"]["graded_in"] == ["Project 1: Tableau dashboard"]
+    if "SQL" in rows:
+        assert rows["SQL"]["status"] == "partial" and rows["SQL"]["graded_share"] == 0 and rows["SQL"]["mentions"] >= 2
     # re-import without changes: no new version, no new analysis
     again = client.get(f"/api/tasks/{client.post('/api/canvas/courses/101/import', headers=fac, json={}).json()['task_id']}", headers=fac).json()["result"]
     assert again["syllabus_id"] == sid and not again["created"] and not again["changed"] and again["analysis_id"] == res["analysis_id"]

@@ -360,3 +360,145 @@ def simulate(pid: str, body: SimulateIn, user: User = Depends(faculty), db: Sess
     from ..services import simulator
 
     return simulator.simulate(db, _program(db, user, pid), body.ops, body.target)
+
+
+# ── AACSB assurance of learning ────────────────────────────────────────────────
+class GoalIn(BaseModel):
+    code: str = Field(min_length=1, max_length=20)
+    title: str = Field(min_length=5, max_length=300)
+    description: str | None = Field(default=None, max_length=4000)
+    skill_ids: list[int] = Field(default_factory=list, max_length=30)
+    target_pct: int = Field(default=80, ge=1, le=100)
+
+
+class ResultIn(BaseModel):
+    term: str = Field(min_length=4, max_length=40)
+    course_code: str | None = Field(default=None, max_length=30)
+    measure: str = Field(min_length=3, max_length=300)
+    measure_type: str = Field(default="direct", pattern="^(direct|indirect)$")
+    students_assessed: int = Field(ge=1, le=100000)
+    students_meeting: int = Field(ge=0, le=100000)
+    target_pct: int | None = Field(default=None, ge=1, le=100)
+    notes: str | None = Field(default=None, max_length=4000)
+    action: str | None = Field(default=None, max_length=4000)
+
+
+def _goal(db: Session, user: User, pid: str, gid: str):
+    from ..models import ProgramGoal
+
+    g = db.get(ProgramGoal, gid)
+    if not g or g.program_id != pid or g.org_id != user.org_id:
+        raise HTTPException(404, "Goal not found")
+    return g
+
+
+def _check_skills(db: Session, ids: list[int]) -> list[int]:
+    ids = list(dict.fromkeys(ids))
+    known = set(db.scalars(select(Skill.id).where(Skill.id.in_(ids)))) if ids else set()
+    if unknown := [i for i in ids if i not in known]:
+        raise HTTPException(400, f"Unknown skills: {unknown}")
+    return ids
+
+
+@router.get("/programs/{pid}/aol")
+def aol_report(pid: str, target: str = gapsvc.ALL, user: User = Depends(faculty), db: Session = Depends(get_db)):
+    from ..services import aol
+
+    return aol.report(db, _program(db, user, pid), target)
+
+
+@router.get("/programs/{pid}/aol/suggestions")
+def aol_suggestions(pid: str, target: str = gapsvc.ALL, user: User = Depends(faculty), db: Session = Depends(get_db)):
+    from ..services import aol
+
+    return aol.suggest_goals(db, _program(db, user, pid), target)
+
+
+@router.post("/programs/{pid}/aol/goals", status_code=201)
+def create_goal(pid: str, body: GoalIn, user: User = Depends(faculty), db: Session = Depends(get_db)):
+    from ..models import ProgramGoal
+    from ..services import aol
+
+    p = _program(db, user, pid)
+    code = body.code.strip().upper()
+    if db.scalar(select(ProgramGoal.id).where(ProgramGoal.program_id == p.id, ProgramGoal.code == code)):
+        raise HTTPException(409, f"{code} already exists in this program")
+    g = ProgramGoal(org_id=user.org_id, program_id=p.id, code=code, title=body.title.strip(), description=(body.description or "").strip() or None,
+                    skill_ids=_check_skills(db, body.skill_ids), target_pct=body.target_pct, created_by=user.id)
+    db.add(g)
+    audit(db, user, "aol.goal_created", program=p.name, goal=code)
+    db.commit()
+    return aol.goal_out(g, dict(db.execute(select(Skill.id, Skill.name).where(Skill.id.in_(g.skill_ids or [0]))).all()))
+
+
+@router.put("/programs/{pid}/aol/goals/{gid}")
+def update_goal(pid: str, gid: str, body: GoalIn, user: User = Depends(faculty), db: Session = Depends(get_db)):
+    from ..services import aol
+
+    _program(db, user, pid)
+    g = _goal(db, user, pid, gid)
+    g.code, g.title, g.description = body.code.strip().upper(), body.title.strip(), (body.description or "").strip() or None
+    g.skill_ids, g.target_pct = _check_skills(db, body.skill_ids), body.target_pct
+    audit(db, user, "aol.goal_updated", goal=g.code)
+    db.commit()
+    return aol.goal_out(g, dict(db.execute(select(Skill.id, Skill.name).where(Skill.id.in_(g.skill_ids or [0]))).all()))
+
+
+@router.delete("/programs/{pid}/aol/goals/{gid}")
+def delete_goal(pid: str, gid: str, user: User = Depends(faculty), db: Session = Depends(get_db)):
+    _program(db, user, pid)
+    g = _goal(db, user, pid, gid)
+    audit(db, user, "aol.goal_deleted", goal=g.code)
+    db.delete(g)
+    db.commit()
+    return {"deleted": gid}
+
+
+@router.post("/programs/{pid}/aol/goals/{gid}/results", status_code=201)
+def add_result(pid: str, gid: str, body: ResultIn, user: User = Depends(faculty), db: Session = Depends(get_db)):
+    from ..models import AssessmentResult
+    from ..services import aol
+
+    _program(db, user, pid)
+    g = _goal(db, user, pid, gid)
+    if body.students_meeting > body.students_assessed:
+        raise HTTPException(400, "More students met expectations than were assessed")
+    r = AssessmentResult(org_id=user.org_id, goal_id=g.id, term=body.term.strip(), course_code=(body.course_code or "").strip().upper() or None,
+                         measure=body.measure.strip(), measure_type=body.measure_type, students_assessed=body.students_assessed,
+                         students_meeting=body.students_meeting, target_pct=body.target_pct or g.target_pct,
+                         notes=(body.notes or "").strip() or None, action=(body.action or "").strip() or None,
+                         entered_by=user.id, entered_by_name=user.full_name)
+    db.add(r)
+    audit(db, user, "aol.result_added", goal=g.code, term=r.term)
+    db.commit()
+    return aol.result_out(r)
+
+
+@router.delete("/programs/{pid}/aol/goals/{gid}/results/{rid}")
+def delete_result(pid: str, gid: str, rid: str, user: User = Depends(faculty), db: Session = Depends(get_db)):
+    from ..models import AssessmentResult
+
+    _program(db, user, pid)
+    _goal(db, user, pid, gid)
+    r = db.get(AssessmentResult, rid)
+    if not r or r.goal_id != gid:
+        raise HTTPException(404, "Result not found")
+    db.delete(r)
+    audit(db, user, "aol.result_deleted", term=r.term)
+    db.commit()
+    return {"deleted": rid}
+
+
+@router.get("/programs/{pid}/aol/report.{fmt}")
+def aol_export(pid: str, fmt: str, target: str = gapsvc.ALL, user: User = Depends(faculty), db: Session = Depends(get_db)):
+    from ..services import aol, aol_export
+
+    if fmt not in ("docx", "pdf"):
+        raise HTTPException(404, "Use .docx or .pdf")
+    p = _program(db, user, pid)
+    r = aol.report(db, p, target)
+    name = "AoL-" + "".join(ch if ch.isalnum() else "_" for ch in p.name)[:60]
+    if fmt == "pdf":
+        return Response(aol_export.pdf(r), media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{name}.pdf"'})
+    return Response(aol_export.docx(r), media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    headers={"Content-Disposition": f'attachment; filename="{name}.docx"'})

@@ -10,12 +10,17 @@ Then start CometIQ with:
 - /idp: an OpenID Connect provider with a "choose who to sign in as" page (RS256-signed ID tokens, PKCE checked).
 - /canvas: Canvas OAuth2 and REST endpoints with two demo courses, a syllabus page and graded assignments.
 - /badgr: the Canvas Credentials (Badgr v2) endpoints CometIQ uses; see /badgr/_sent for what was received.
+- /canvas/courses/<id>/cometiq?as=instructor|student: a Canvas course page that launches CometIQ in a frame (LTI 1.3).
+  Start CometIQ with LTI_ENABLED=true LTI_CLIENT_ID=cometiq-lti LTI_ISSUER=http://127.0.0.1:8899/canvas
+  LTI_AUTH_URL=http://127.0.0.1:8899/canvas/api/lti/authorize_redirect LTI_JWKS_URL=http://127.0.0.1:8899/canvas/api/lti/security/jwks
+  LTI_FRAME_ANCESTORS=http://127.0.0.1:8899 (and TOOL_URL below if CometIQ is not on http://127.0.0.1:8812).
 Never point a production deployment at this.
 """
 import base64
 import hashlib
 import html
 import json
+import os
 import secrets
 import time
 from urllib.parse import urlencode
@@ -152,6 +157,53 @@ async def canvas_assignments(req: Request):
     return JSONResponse(ASSIGNMENTS.get(req.path_params["cid"], []))
 
 
+# ── LTI 1.3 platform (Canvas launching CometIQ in a frame) ─────────────────────
+TOOL = os.environ.get("TOOL_URL", "http://127.0.0.1:8812")
+LTI_PEOPLE = {"instructor": {"sub": "lti-fac-1", "email": "dr.rivera@utdallas.edu", "name": "Maria Rivera",
+                             "role": "http://purl.imsglobal.org/vocab/lis/v2/membership#Instructor"},
+              "student": {"sub": "lti-stu-1", "email": "sam.lee@utdallas.edu", "name": "Sam Lee",
+                          "role": "http://purl.imsglobal.org/vocab/lis/v2/membership#Learner"}}
+C = "https://purl.imsglobal.org/spec/lti/claim/"
+
+
+def _autopost(url: str, fields: dict) -> HTMLResponse:
+    inputs = "".join(f'<input type="hidden" name="{html.escape(k)}" value="{html.escape(str(v))}">' for k, v in fields.items())
+    return HTMLResponse(f'<!doctype html><html lang="en"><head><title>Launching</title></head><body><form id="f" method="post" action="{html.escape(url)}">{inputs}</form>'
+                        '<script>document.getElementById("f").submit()</script></body></html>')
+
+
+async def canvas_course_page(req: Request):
+    cid, who = req.path_params["cid"], req.query_params.get("as", "instructor")
+    course = COURSES.get(cid, {"name": f"Course {cid}", "course_code": ""})
+    return HTMLResponse(f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><title>{html.escape(course['name'])} (Canvas demo)</title>
+<style>body{{margin:0;font-family:system-ui;display:grid;grid-template-columns:220px 1fr;height:100vh}}nav{{background:#394b58;color:#fff;padding:1rem}}
+nav a{{display:block;color:#fff;padding:.4rem 0;text-decoration:none}}nav a.on{{font-weight:700;border-left:3px solid #e66000;padding-left:.5rem}}
+main{{display:flex;flex-direction:column}}header{{padding:.8rem 1rem;border-bottom:1px solid #ddd;font-weight:600}}iframe{{flex:1;border:0;width:100%}}</style></head>
+<body><nav><div style="font-weight:700;margin-bottom:1rem">Canvas (demo)</div><a href="#">Home</a><a href="#">Assignments</a><a href="#">Grades</a>
+<a class="on" href="#">CometIQ skills</a></nav><main><header>{html.escape(course['course_code'])} {html.escape(course['name'])} › CometIQ skills</header>
+<iframe title="CometIQ skills" src="/canvas/lti/start?cid={cid}&amp;as={html.escape(who)}"></iframe></main></body></html>""")
+
+
+async def canvas_lti_start(req: Request):
+    """Third-party initiated login: Canvas posts to the tool's login URL."""
+    who, cid = req.query_params.get("as", "instructor"), req.query_params.get("cid", "101")
+    return _autopost(f"{TOOL}/api/lti/login", {"iss": f"{BASE}/canvas", "login_hint": f"{who}:{cid}", "client_id": "cometiq-lti",
+                                               "target_link_uri": f"{TOOL}/api/lti/launch", "lti_message_hint": "demo", "lti_deployment_id": "1:demo"})
+
+
+async def canvas_lti_authorize(req: Request):
+    q = dict(req.query_params)
+    who, cid = (q.get("login_hint", "instructor:101").split(":") + ["101"])[:2]
+    p, course, now = LTI_PEOPLE.get(who, LTI_PEOPLE["instructor"]), COURSES.get(cid, {}), int(time.time())
+    tok = jwt.encode({"iss": f"{BASE}/canvas", "aud": q["client_id"], "sub": p["sub"], "iat": now, "exp": now + 300, "nonce": q["nonce"],
+                      "email": p["email"], "name": p["name"], C + "version": "1.3.0", C + "message_type": "LtiResourceLinkRequest",
+                      C + "deployment_id": "1:demo", C + "roles": [p["role"]], C + "resource_link": {"id": f"rl-{cid}"},
+                      C + "context": {"id": f"ctx-{cid}", "label": course.get("course_code", ""), "title": course.get("name", "")},
+                      C + "custom": {"canvas_course_id": cid, "canvas_user_id": p["sub"]}},
+                     KEY, algorithm="RS256", headers={"kid": "fake-1"})
+    return _autopost(q["redirect_uri"], {"id_token": tok, "state": q["state"]})
+
+
 # ── Canvas Credentials (Badgr v2) ──────────────────────────────────────────────
 async def badgr_classes(req: Request):
     SENT["badgeclasses"].append(await req.json())
@@ -178,6 +230,8 @@ app = Starlette(routes=[
     Route("/canvas/login/oauth2/auth", canvas_authorize), Route("/canvas/login/oauth2/token", canvas_token, methods=["POST", "DELETE"]),
     Route("/canvas/api/v1/courses", canvas_courses), Route("/canvas/api/v1/courses/{cid}", canvas_course),
     Route("/canvas/api/v1/courses/{cid}/assignments", canvas_assignments),
+    Route("/canvas/courses/{cid}/cometiq", canvas_course_page), Route("/canvas/lti/start", canvas_lti_start),
+    Route("/canvas/api/lti/authorize_redirect", canvas_lti_authorize), Route("/canvas/api/lti/security/jwks", idp_keys),
     Route("/badgr/v2/issuers/{iid}/badgeclasses", badgr_classes, methods=["POST"]),
     Route("/badgr/v2/badgeclasses/{eid}/assertions", badgr_assertions, methods=["POST"]),
     Route("/badgr/v2/assertions/{aid}", badgr_revoke, methods=["DELETE"]), Route("/badgr/_sent", badgr_sent),

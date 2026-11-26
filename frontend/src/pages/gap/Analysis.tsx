@@ -14,7 +14,7 @@ interface SkillRow extends EvidenceRow { is_emerging: boolean }
 interface Analysis {
   id: string; syllabus: { id: string; title: string; code: string | null; semester: string | null; pilot_approved: boolean; approved_by: string | null };
   sample_id: string | null; provenance?: Provenance; inputs: Inputs; decisions: Record<string, Decision>; decision_options: Record<string, string>; reviews: Record<string, Review>; review_summary: ReviewSummary; faculty_statuses: Record<string, string>;
-  score: number; target: string; job_count: number; engine: string; created_at: string; summary: string;
+  score: number; target: string; job_count: number; engine: string; created_at: string; summary: string; score_basis?: string; scoring_version?: string;
   counts: Record<Status, number>; skills: SkillRow[]; gaps: SkillRow[]; strengths: { name: string; mentions: number; in_market: boolean }[];
   emerging: { name: string; demand: number; status: Status }[]; categories: { category: string; coverage: number; skills: number }[];
   recommendations: { title: string; detail: string; skills: string[]; source: string }[];
@@ -66,7 +66,7 @@ export default function Analysis() {
       <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
         <Card>
           <div className="flex flex-col items-center text-center">
-            <ScoreRing value={a.score} size={150} label="mention-based" />
+            <ScoreRing value={a.score} size={150} label={a.score_basis === "graded work" ? "grade-weighted" : "mention-based"} />
             <div className="mt-3 text-sm text-slate-600">vs. top {a.skills.length} skills in <b>{a.job_count}</b> {a.provenance?.sample ? <>postings in the job sample <b>{a.provenance.sample.name}</b></> : <><b>{a.target}</b> postings</>}</div>
             <div className="mt-3 w-full rounded-lg border border-comet-200 bg-comet-50 p-3 text-left text-sm">
               <div className="flex items-baseline justify-between"><span className="font-semibold text-comet-800">Faculty-reviewed coverage</span>
@@ -115,7 +115,7 @@ export default function Analysis() {
             <div className="grid grid-cols-[minmax(150px,220px)_1fr_90px] gap-3 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500"><span>Skill</span><span>Share of postings</span><span>In syllabus</span></div>
             {a.skills.map((s) => (
               <div key={s.name} className="group grid grid-cols-[minmax(150px,220px)_1fr_90px] items-center gap-3 rounded px-1 py-1 text-sm hover:bg-slate-50"
-                title={`${s.name} — ${Math.round(s.demand * 100)}% weighted demand, ${s.job_count} postings, priority ${s.priority}. ${s.mentions ? `Mentioned ${s.mentions}× in syllabus${s.evidence ? `: “${s.evidence}”` : ""}` : "Not found in syllabus"}`}>
+                title={`${s.name} — ${Math.round(s.demand * 100)}% weighted demand, ${s.job_count} postings, priority ${s.priority}. ${s.mentions ? `Mentioned ${s.mentions}× in syllabus${s.evidence ? `: “${s.evidence}”` : ""}` : "Not found in syllabus"}${s.graded_share !== undefined ? `. ${Math.round(s.graded_share * 100)}% of the course grade` : ""}`}>
                 <div className="truncate font-medium text-slate-700">{s.name}{s.is_emerging && <span className="ml-1 text-[10px] font-bold text-flame-600">NEW</span>}</div>
                 <div className="flex items-center gap-2">
                   <div className="h-2.5 flex-1 rounded-r bg-slate-100"><div className="h-2.5 rounded-r" style={{ width: `${Math.min(100, s.demand * 100)}%`, background: STATUS[s.status].color }} /></div>

@@ -206,7 +206,7 @@ def analyze(db: Session, syl: Syllabus, target: str | None = None, top_n: int = 
     counts = {s: sum(r["status"] == s for r in rows) for s in STATUS_W}
     result = {
         "target": target, "job_count": n_jobs, "top_n": len(rows), "counts": counts, "provenance": provenance,
-        "score_basis": "mentions",
+        "score_basis": "graded work" if any("graded" in v for v in sv.skills.values()) else "mentions",
         "skills": rows, "gaps": gaps, "strengths": strengths, "emerging": emerging,
         "categories": [{"category": k, "skills": v["skills"], "coverage": round(100 * v["earned"] / v["demand"], 1) if v["demand"] else 0}
                        for k, v in sorted(cat.items(), key=lambda kv: -kv[1]["demand"])],

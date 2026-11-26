@@ -125,6 +125,11 @@ def erase(db: Session, user: User) -> None:
     db.execute(update(ProposalReview).where(ProposalReview.reviewer_id == uid).values(reviewer_id=None, reviewer_name=None))
     db.execute(update(CurriculumMapEntry).where(CurriculumMapEntry.set_by_id == uid).values(set_by_id=None, set_by_name=None))
     db.execute(update(JobSample).where(JobSample.created_by == uid).values(created_by=None))
+    # assurance-of-learning records stay with the program, without who entered them
+    from ..models import AssessmentResult, ProgramGoal
+
+    db.execute(update(AssessmentResult).where(AssessmentResult.entered_by == uid).values(entered_by=None, entered_by_name=None))
+    db.execute(update(ProgramGoal).where(ProgramGoal.created_by == uid).values(created_by=None))
     db.execute(delete(PasswordReset).where(PasswordReset.user_id == uid))
     # background jobs they started, and queued/sent emails addressed to them (payloads can hold the address)
     db.execute(delete(Task).where(Task.user_id == uid))

@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import errors, limits, monitoring
 from .config import get_settings
-from .routers import admin, ask, auth, badges, canvas, search, catalog, curriculum, dashboard, partners, evidence, forge, gap, graphmap, jobs, match, notifications, path, privacy, tasks
+from .routers import admin, ask, auth, badges, canvas, lti, search, catalog, curriculum, dashboard, partners, evidence, forge, gap, graphmap, jobs, match, notifications, path, privacy, tasks
 from .seed import init_db
 
 settings = get_settings()
@@ -65,7 +65,12 @@ errors.install(app)
 async def security_headers(request, call_next):
     resp = await call_next(request)
     resp.headers.setdefault("X-Content-Type-Options", "nosniff")
-    resp.headers.setdefault("X-Frame-Options", "DENY")
+    path = request.url.path
+    if settings.LTI_ENABLED and (path.startswith(("/lti/", "/api/lti/")) or path == "/sso/complete"):
+        # the in-Canvas pages are shown in Canvas's frame; every other page refuses to be framed
+        resp.headers.setdefault("Content-Security-Policy", f"frame-ancestors 'self' {settings.LTI_FRAME_ANCESTORS}")
+    else:
+        resp.headers.setdefault("X-Frame-Options", "DENY")
     resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     resp.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
     if settings.ENV == "production":
@@ -74,7 +79,7 @@ async def security_headers(request, call_next):
 
 
 for r in (auth.router, admin.router, catalog.router, dashboard.router, gap.router, jobs.router, forge.router, path.router, path.advising, match.router, evidence.router, graphmap.router, notifications.router, tasks.router, privacy.router,
-          curriculum.router, badges.router, badges.public, partners.router, ask.router, search.router, canvas.router):
+          curriculum.router, badges.router, badges.public, partners.router, ask.router, search.router, canvas.router, lti.router):
     app.include_router(r)
 
 

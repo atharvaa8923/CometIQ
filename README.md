@@ -166,10 +166,17 @@ cd backend && ../.venv/bin/alembic revision --autogenerate -m "describe the chan
 ../.venv/bin/python -m pytest -q   # test_migrations fails if models and migrations disagree
 ```
 
+### AACSB assurance of learning
+Curriculum → AACSB report assembles each program's competency goals, where they are taught (curriculum map), direct
+measures (graded Canvas work), faculty-entered results and closing-the-loop actions, exportable as Word or PDF. Gap scores
+for courses imported from Canvas are grade-weighted (a skill counts as practiced when it carries ≥ 5% of the grade).
+See [docs/AACSB-REPORT.md](docs/AACSB-REPORT.md).
+
 ### University systems
 Sign in with the **UTD NetID** (OpenID Connect: Microsoft Entra ID or Shibboleth), **import syllabi and graded assignments
 from Canvas**, send faculty-verified badges to **Canvas Credentials**, issue every badge as a signed **Open Badges 3.0**
-credential with an **Add to LinkedIn** link, and load the career center's **Handshake** postings. Each is off until
+credential with an **Add to LinkedIn** link, load the career center's **Handshake** postings, and show a **CometIQ skills**
+page inside every Canvas course (LTI 1.3). Each is off until
 configured; setup steps for IT, Canvas admins and the career center are in [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
 `backend/scripts/fake_institution.py` runs local stand-ins for trying every flow without real credentials.
 
