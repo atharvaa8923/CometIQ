@@ -48,13 +48,15 @@ def set_progress(db: Session, task: Task, text: str) -> None:
     db.commit()
 
 
-def _claim_and_run(task_id: str) -> bool:
+def _claim_and_run(task_id: str, already_claimed: bool = False) -> bool:
     with SessionLocal() as db:
-        claimed = db.execute(update(Task).where(Task.id == task_id, Task.status == "queued")
-                             .values(status="running", started_at=datetime.now(timezone.utc), attempts=Task.attempts + 1)).rowcount
-        db.commit()
-        if not claimed:
-            return False
+        if not already_claimed:
+            # compare-and-set: only one worker (on any instance) can move a task from queued to running
+            claimed = db.execute(update(Task).where(Task.id == task_id, Task.status == "queued")
+                                 .values(status="running", started_at=datetime.now(timezone.utc), attempts=Task.attempts + 1)).rowcount
+            db.commit()
+            if not claimed:
+                return False
         task = db.get(Task, task_id)
         token = current_org.set(task.org_id)
         try:
@@ -82,10 +84,29 @@ def _next_queued() -> str | None:
         return db.scalar(select(Task.id).where(Task.status == "queued").order_by(Task.created_at).limit(1))
 
 
+def _claim_next_pg() -> str | None:
+    """PostgreSQL: claim the oldest queued task no other worker is claiming, in one statement (FOR UPDATE SKIP LOCKED)."""
+    from sqlalchemy import text
+
+    with SessionLocal() as db:
+        tid = db.execute(text(
+            "UPDATE tasks SET status = 'running', started_at = now(), attempts = attempts + 1 "
+            "WHERE id = (SELECT id FROM tasks WHERE status = 'queued' ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED) "
+            "RETURNING id")).scalar()
+        db.commit()
+        return tid
+
+
+MAX_STALE_REQUEUES = 3
+
+
 def requeue_stale(minutes: int = 15) -> int:
     """Tasks left 'running' by a crashed/restarted instance go back to the queue."""
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
     with SessionLocal() as db:
+        # a task whose worker keeps dying (e.g. it crashes the process) must not loop forever
+        db.execute(update(Task).where(Task.status == "running", Task.started_at < cutoff, Task.attempts >= MAX_STALE_REQUEUES)
+                   .values(status="failed", error="Stopped: the worker running it stopped repeatedly", finished_at=datetime.now(timezone.utc)))
         n = db.execute(update(Task).where(Task.status == "running", Task.started_at < cutoff).values(status="queued")).rowcount
         db.commit()
         return n or 0
@@ -95,10 +116,16 @@ def _worker_loop(idx: int) -> None:
     log.info("Task worker %d started", idx)
     while not _stop.is_set():
         try:
-            tid = _next_queued()
-            if tid:
-                _claim_and_run(tid)
-                continue
+            if SessionLocal.kw["bind"].dialect.name == "postgresql":
+                tid = _claim_next_pg()
+                if tid:
+                    _claim_and_run(tid, already_claimed=True)
+                    continue
+            else:
+                tid = _next_queued()
+                if tid:
+                    _claim_and_run(tid)
+                    continue
         except Exception:
             log.exception("Task worker error")
         _stop.wait(1.0)

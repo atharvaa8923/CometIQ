@@ -3,12 +3,12 @@ from alembic.autogenerate import compare_metadata
 from alembic.runtime.migration import MigrationContext
 from sqlalchemy import inspect
 
-from app.db import Base, engine
+from app.db import Base, engine, include_object
 
 
 def test_migrated_schema_matches_models(client):
     with engine.connect() as conn:
-        diff = compare_metadata(MigrationContext.configure(conn, opts={"compare_type": True}), Base.metadata)
+        diff = compare_metadata(MigrationContext.configure(conn, opts={"compare_type": True, "include_object": include_object}), Base.metadata)
     assert diff == [], f"Models changed without a migration — run: alembic revision --autogenerate -m '...'\\n{diff}"
 
 

@@ -9,11 +9,12 @@ from datetime import datetime, timezone
 
 from fastapi import HTTPException
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..models import (CurriculumProposal, ForgeDraft, GapAnalysis, GapDecision, JobSample, ProposalReview, Syllabus,
-                      SyllabusVersion, User)
+from ..db import savepoint
+from ..models import CurriculumProposal, ForgeDraft, GapAnalysis, GapDecision, JobSample, ProposalReview, Syllabus, SyllabusVersion, User
 from . import forge as forgesvc
 from . import versions as vs
 from .decisions import DECISIONS
@@ -103,15 +104,24 @@ def create(db: Session, user: User, syl: Syllabus, title: str, summary: str, eff
     if proposed_text and proposed_text.strip():
         text = proposed_text  # written in the syllabus copilot
     decisions = list(db.scalars(select(GapDecision).where(GapDecision.syllabus_id == syl.id, GapDecision.status.in_(("open", "drafted", "implemented")))))
-    number = (db.scalar(select(func.max(CurriculumProposal.number)).where(CurriculumProposal.org_id == user.org_id)) or 0) + 1
-    p = CurriculumProposal(org_id=user.org_id, number=number, syllabus_id=syl.id, title=title.strip(), summary=summary.strip(),
-                           author_id=user.id, author_name=user.full_name, base_version_id=base.id, forge_draft_id=draft.id if draft else None,
-                           proposed_text=text, proposed_content=content, decision_ids=[d.id for d in decisions],
-                           evidence=_evidence(db, syl, content, decisions), effective_term=(effective_term or "").strip() or None,
-                           required_approvals=max(1, get_settings().CURRICULUM_APPROVALS))
-    db.add(p)
-    db.flush()
-    return p
+    evidence = _evidence(db, syl, content, decisions)
+    # proposal numbers are per organization (#1, #2, ...): two people opening one at the same moment would pick the same
+    # number, so the insert runs in a savepoint and the loser takes the next number
+    for attempt in range(5):
+        number = (db.scalar(select(func.max(CurriculumProposal.number)).where(CurriculumProposal.org_id == user.org_id)) or 0) + 1
+        p = CurriculumProposal(org_id=user.org_id, number=number, syllabus_id=syl.id, title=title.strip(), summary=summary.strip(),
+                               author_id=user.id, author_name=user.full_name, base_version_id=base.id, forge_draft_id=draft.id if draft else None,
+                               proposed_text=text, proposed_content=content, decision_ids=[d.id for d in decisions],
+                               evidence=evidence, effective_term=(effective_term or "").strip() or None,
+                               required_approvals=max(1, get_settings().CURRICULUM_APPROVALS))
+        try:
+            with savepoint(db):
+                db.add(p)
+            return p
+        except IntegrityError:
+            if attempt == 4:
+                raise
+    raise RuntimeError("unreachable")
 
 
 def current_votes(p: CurriculumProposal) -> dict[str, ProposalReview]:
@@ -204,11 +214,11 @@ def change_form(db: Session, p: CurriculumProposal) -> dict:
 
 def change_form_pdf(form: dict) -> bytes:
     import io
+    from xml.sax.saxutils import escape as x
 
     from reportlab.lib.pagesizes import letter
     from reportlab.lib.units import inch
     from reportlab.platypus import ListFlowable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-    from xml.sax.saxutils import escape as x
 
     from .reports import GREEN, _styles
 

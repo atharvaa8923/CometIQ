@@ -76,6 +76,28 @@ class Settings(BaseSettings):
     LOGIN_RATE_LIMIT: int = 10
     # Pilot: comma-separated roles allowed to register/sign in (e.g. "admin,faculty"). Empty = all roles.
     PILOT_ROLES: str = ""
+    # Database pool and timeouts (PostgreSQL); SQLite uses DB_LOCK_TIMEOUT_MS as its busy timeout
+    DB_POOL_SIZE: int = 8          # per worker process: workers × (pool + overflow) must stay below max_connections (100)
+    DB_MAX_OVERFLOW: int = 12
+    DB_POOL_TIMEOUT_S: int = 10
+    DB_POOL_RECYCLE_S: int = 1800
+    DB_STATEMENT_TIMEOUT_MS: int = 15000
+    DB_LOCK_TIMEOUT_MS: int = 5000
+    DB_IDLE_TX_TIMEOUT_MS: int = 60000
+    # Data retention (daily; 0 = keep forever)
+    CACHE_ENABLED: bool = True
+    CACHE_TTL_S: int = 600
+    RATE_LIMITS_ENABLED: bool = True
+    RATE_LIMIT_MULTIPLIER: float = 1.0   # scale every per-minute limit (e.g. 3 for a busy pilot, 0.1 to test)
+    RETENTION_IDEMPOTENCY_HOURS: int = 24
+    RETENTION_ENABLED: bool = True
+    RETENTION_TASKS_DAYS: int = 30            # finished background jobs (their payloads can hold email addresses)
+    RETENTION_NOTIFICATIONS_DAYS: int = 180   # read notifications; unread ones after twice this
+    RETENTION_AI_USAGE_DAYS: int = 90
+    RETENTION_AUDIT_DAYS: int = 0             # the audit trail is kept unless the institution sets a period
+    RETENTION_SYNC_RUNS_DAYS: int = 180
+    RETENTION_CLOSED_JOBS_DAYS: int = 365     # closed synced postings without applications and outside documented samples
+    RETENTION_UNUSED_SNAPSHOTS_DAYS: int = 30
     CURRICULUM_APPROVALS: int = 2       # approvals a curriculum proposal needs (author excluded)
     OUTCOME_MIN_COHORT: int = 10        # smallest student group shown in outcome comparisons
 

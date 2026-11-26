@@ -6,9 +6,11 @@ preferring courses in their own program they have not taken yet. Employers can s
 when a student who is open to matching completes it.
 """
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..models import (Course, Skill, SkillBadge, SkillStack, StackCompletion, StackSubscription, StudentCourse, StudentProfile, User)
+from ..db import savepoint
+from ..models import Course, Skill, SkillBadge, SkillStack, StackCompletion, StackSubscription, StudentCourse, StudentProfile, User
 from .badges import faculty_basis
 from .curriculum_map import program_courses
 
@@ -91,8 +93,12 @@ def check_completions(db: Session, org_id: str, student_ids: set[str] | None = N
             if (st.id, sid) in have:
                 continue
             if st.requirements and all((h := held.get(r["skill_id"])) and RANK[h["level"]] >= RANK[r["level"]] for r in st.requirements):
-                db.add(StackCompletion(stack_id=st.id, student_id=sid))
                 have.add((st.id, sid))
+                try:
+                    with savepoint(db):   # completed concurrently by another request: keep theirs, notify once
+                        db.add(StackCompletion(stack_id=st.id, student_id=sid))
+                except IntegrityError:
+                    continue
                 n += 1
                 stu = db.get(User, sid)
                 if stu:

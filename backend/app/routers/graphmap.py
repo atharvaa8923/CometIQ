@@ -14,7 +14,7 @@ from ..db import get_db
 from ..models import Course, CourseSkill, Job, JobSkill, Program, Skill, StudentCourse, StudentProfile, User
 from ..security import current_user
 from ..services.gap import IMPORTANCE_W
-from ..services.match import student_skills
+from ..services.match import students_skills
 
 router = APIRouter(prefix="/api/graph", tags=["knowledge-graph"])
 
@@ -37,6 +37,15 @@ def _visible_students(db: Session, user: User, program_id: str | None) -> tuple[
 @router.get("/map")
 def graph_map(role_family: str = "", program_id: str = "", max_skills: int = 18, user: User = Depends(current_user),
               db: Session = Depends(get_db)):
+    from ..services.cache import cached
+
+    # what a user sees depends on their role (and, for students, on themselves)
+    who = (user.role, user.id if user.role == "student" else "")
+    return cached(db, user.org_id, ("graph", role_family, program_id, max_skills, *who),
+                  lambda: _graph_map(role_family, program_id, max_skills, user, db))
+
+
+def _graph_map(role_family: str, program_id: str, max_skills: int, user: User, db: Session):
     if role_family and role_family not in ROLE_FAMILIES:
         raise HTTPException(400, "Unknown role family")
     program = db.get(Program, program_id) if program_id else None
@@ -46,7 +55,9 @@ def graph_map(role_family: str = "", program_id: str = "", max_skills: int = 18,
     visible = (Job.org_id == user.org_id) | Job.org_id.is_(None)
 
     # ── Layer 1: jobs (role families, or individual postings when one family is chosen) ──
-    jq = select(Job).where(Job.is_open, visible)
+    from sqlalchemy.orm import lazyload
+
+    jq = select(Job).options(lazyload(Job.skills)).where(Job.is_open, visible)
     if role_family:
         jq = jq.where(Job.role_family == role_family)
     jobs = list(db.scalars(jq))
@@ -99,8 +110,9 @@ def graph_map(role_family: str = "", program_id: str = "", max_skills: int = 18,
     top_set, course_set = set(top), set(top_courses)
     if mode == "aggregate":
         counts: dict[int, int] = defaultdict(int)
+        all_sk = students_skills(db, [u.id for u, _ in studs])
         for u, _ in studs:
-            for sid, v in student_skills(db, u.id).items():
+            for sid, v in all_sk.get(u.id, {}).items():
                 if sid in top_set and v["level"] >= 0.5:
                     counts[sid] += 1
         if studs:
@@ -113,8 +125,9 @@ def graph_map(role_family: str = "", program_id: str = "", max_skills: int = 18,
             for uid, cid, st in db.execute(select(StudentCourse.user_id, StudentCourse.course_id, StudentCourse.status)
                                           .where(StudentCourse.user_id.in_(ids), StudentCourse.course_id.in_(course_set))).all():
                 taken[uid].append((cid, st))
+        all_sk = students_skills(db, ids)
         for u, prof in studs:
-            sk = student_skills(db, u.id)
+            sk = all_sk.get(u.id, {})
             have = [(sid, v["level"]) for sid, v in sk.items() if sid in top_set and v["level"] >= 0.5]
             if not have and not taken[u.id]:
                 continue

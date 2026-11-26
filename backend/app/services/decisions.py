@@ -76,15 +76,21 @@ def record(db: Session, user: User, syl: Syllabus, ga: GapAnalysis, skill_id: in
             raise HTTPException(400, "Choose a course other than this one")
     if decision == "defer" and len((revisit_term or "").strip()) < 4:
         raise HTTPException(400, "Say when to revisit it, e.g. Fall 2027")
-    d = GapDecision(org_id=syl.org_id, syllabus_id=syl.id, skill_id=skill_id, analysis_id=ga.id, decision=decision,
+    import uuid
+
+    new_id = uuid.uuid4().hex
+    # retire the current decision first: a partial unique index allows one active decision per course and skill, so two
+    # people deciding at the same moment cannot both succeed (the second gets a 409 and sees the first one's decision)
+    for prev in db.scalars(select(GapDecision).where(GapDecision.syllabus_id == syl.id, GapDecision.skill_id == skill_id,
+                                                     GapDecision.status.in_(ACTIVE)).with_for_update(of=GapDecision)):
+        prev.status, prev.superseded_by = "superseded", new_id
+    db.flush()
+    d = GapDecision(id=new_id, org_id=syl.org_id, syllabus_id=syl.id, skill_id=skill_id, analysis_id=ga.id, decision=decision,
                     rationale=rationale, covered_in=codes or None,
                     revisit_term=((revisit_term or "").strip() or None) if decision == "defer" else None,
                     reviewer_id=user.id, reviewer_name=user.full_name, evidence=evidence_for(db, ga, row, review), status="open")
     db.add(d)
     db.flush()
-    for prev in db.scalars(select(GapDecision).where(GapDecision.syllabus_id == syl.id, GapDecision.skill_id == skill_id,
-                                                     GapDecision.id != d.id, GapDecision.status.in_(ACTIVE))):
-        prev.status, prev.superseded_by = "superseded", d.id
     return d
 
 

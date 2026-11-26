@@ -18,7 +18,9 @@ ACTIVE_DECISIONS = ("open", "drafted", "implemented")
 def _course_syllabi(db: Session, org_id: str) -> dict[str, list[Syllabus]]:
     """Analyzed syllabi by course code (upper case), newest first."""
     out: dict[str, list[Syllabus]] = defaultdict(list)
-    for s in db.scalars(select(Syllabus).where(Syllabus.org_id == org_id).order_by(Syllabus.created_at.desc())):
+    from sqlalchemy.orm import selectinload
+
+    for s in db.scalars(select(Syllabus).options(selectinload(Syllabus.analyses)).where(Syllabus.org_id == org_id).order_by(Syllabus.created_at.desc())):
         if s.code and s.analyses:
             out[s.code.upper()].append(s)
     return out
@@ -50,14 +52,19 @@ def build(db: Session, org_id: str, target: str = gapsvc.ALL) -> dict:
     for p in waiting:
         syl_ids_waiting[p.syllabus_id].append(p)
     rows = []
+    pcm = cmap.program_course_map(db, org_id)
+    from ..models import Course
+
+    code_of = dict(db.execute(select(Course.id, Course.code).where(Course.org_id == org_id)).all())
+    badge_pairs: dict[str, set[str]] = {}
+    for cid, stu in db.execute(select(SkillBadge.course_id, SkillBadge.student_id).where(SkillBadge.org_id == org_id, SkillBadge.status == "active")):
+        badge_pairs.setdefault(cid, set()).add(stu)
     for prog in db.scalars(select(Program).where(Program.org_id == org_id).order_by(Program.name)):
-        courses = cmap.program_courses(prog)
-        codes = {c.code.upper() for c, _ in courses}
-        core = {c.code.upper() for c, is_core in courses if is_core}
+        courses = pcm.get(prog.id, [])
+        codes = {code_of[c].upper() for c, _ in courses if c in code_of}
+        core = {code_of[c].upper() for c, is_core in courses if is_core and c in code_of}
         analyzed = {code: syl_by_code[code] for code in codes if code in syl_by_code}
-        course_ids = [c.id for c, _ in courses]
-        badges = db.scalar(select(func.count(func.distinct(SkillBadge.student_id))).where(
-            SkillBadge.org_id == org_id, SkillBadge.status == "active", SkillBadge.course_id.in_(course_ids))) or 0 if course_ids else 0
+        badges = len(set().union(*[badge_pairs.get(c, set()) for c, _ in courses])) if courses else 0
         base = {"id": prog.id, "name": prog.name, "type": prog.type, "catalog_year": prog.catalog_year,
                 "catalog_confirmed": bool(prog.catalog_confirmed_by), "courses": len(courses), "core_courses": len(core),
                 "analyzed_courses": len(analyzed), "core_analyzed": len(core & set(analyzed)), "badge_holders": badges}

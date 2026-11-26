@@ -3,7 +3,7 @@ import json
 import logging
 from pathlib import Path
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from .config import get_settings
@@ -252,6 +252,9 @@ def init_db() -> None:
 
     migrate()
     with SessionLocal() as db:
+        if db.get_bind().dialect.name == "postgresql":
+            # several app processes may start at once (uvicorn --workers): one seeds, the others wait and then see the data
+            db.execute(text("SELECT pg_advisory_xact_lock(724002)"))
         sync_skills(db)
         if not db.scalar(select(func.count(Organization.id))):
             if get_settings().SEED_DEMO:

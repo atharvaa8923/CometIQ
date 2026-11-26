@@ -14,7 +14,6 @@ from . import gap as gapsvc
 from . import parser
 from . import versions as vs
 from .badges import faculty_basis
-from .curriculum_map import program_courses
 from .skills import extract_builtin
 
 STATUS_W = vs.STATUS_W
@@ -43,7 +42,11 @@ def _where_else(db: Session, org_id: str, exclude_code: str | None) -> dict[int,
 def _programs_with(db: Session, org_id: str, code: str | None) -> list[Program]:
     if not code:
         return []
-    return [p for p in db.scalars(select(Program).where(Program.org_id == org_id)) if any(c.code.upper() == code.upper() for c, _ in program_courses(p))]
+    from .curriculum_map import program_course_map
+
+    cid = db.scalar(select(Course.id).where(Course.org_id == org_id, Course.code == code))
+    pcm = program_course_map(db, org_id)
+    return [p for p in db.scalars(select(Program).where(Program.org_id == org_id).order_by(Program.name)) if any(c == cid for c, _ in pcm.get(p.id, []))]
 
 
 def preview(db: Session, syl: Syllabus, text: str) -> dict:

@@ -68,7 +68,7 @@ export default function EmployerMatch() {
   const [open, setOpen] = useState(false);
   const [exp, setExp] = useState<string | null>(null);
   useEffect(() => { if (!jid && jobs.data?.length) setJid(jobs.data[0].id); }, [jobs.data, jid]);
-  const cands = useApi<{ candidates: Cand[] }>(jid ? `/match/employer/jobs/${jid}/candidates` : null);
+  const cands = useApi<{ candidates: Cand[]; total?: number; limit?: number }>(jid ? `/match/employer/jobs/${jid}/candidates` : null);
   const pipe = useApi<Pipeline>("/match/employer/pipeline");
   const setStatus = async (sid: string, status: string) => {
     await api.post(`/match/employer/jobs/${jid}/candidates/${sid}`, { status }); toast(`Candidate moved to ${status}`); cands.reload(); pipe.reload(); jobs.reload();
@@ -84,7 +84,9 @@ export default function EmployerMatch() {
       {tab === "partners" && <PartnerProjects />}
 
       {tab === "cands" && (!jobs.data?.length ? <Empty icon={<BriefcaseBusiness className="h-8 w-8" />} title="Post your first job">CometIQ extracts the skills and ranks matching students instantly.</Empty> : (
-        <Card padded={false} title={<select className="input w-96 py-1.5" value={jid} onChange={(e) => setJid(e.target.value)} aria-label="Job">{jobs.data.map((j) => <option key={j.id} value={j.id}>{j.title} — {j.location}</option>)}</select>}>
+        <Card padded={false} title={<select className="input w-96 py-1.5" value={jid} onChange={(e) => setJid(e.target.value)} aria-label="Job">{jobs.data.map((j) => <option key={j.id} value={j.id}>{j.title} — {j.location}</option>)}</select>}
+          actions={cands.data?.total !== undefined && cands.data.total > cands.data.candidates.length
+            ? <span className="text-xs text-slate-600">Top {cands.data.candidates.length} of {cands.data.total} matching students</span> : undefined}>
           {cands.loading ? <Spinner /> : (
             <ul className="divide-y divide-slate-100">{cands.data?.candidates.map((c) => (
               <li key={c.student.id} className="px-5 py-4">

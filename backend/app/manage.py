@@ -3,6 +3,7 @@
   python -m app.manage remove-demo-data [--yes]     delete demo accounts, their data, sample jobs and the sample syllabus
   python -m app.manage verify-erasure --user-id ID --email EMAIL [--name NAME]
                                                     prove a deleted person leaves no rows behind (exit 1 if traces remain)
+  python -m app.manage retention [--dry-run]         apply the data-retention rules now (they also run daily)
   python -m app.manage restore-check [--json]       migration revision + row counts (compare a restored copy with the source)
 """
 import argparse
@@ -108,6 +109,8 @@ def main(argv=None) -> int:
     v.add_argument("--user-id", required=True)
     v.add_argument("--email", required=True)
     v.add_argument("--name")
+    rt = sub.add_parser("retention")
+    rt.add_argument("--dry-run", action="store_true")
     c = sub.add_parser("restore-check")
     c.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
@@ -115,6 +118,13 @@ def main(argv=None) -> int:
         return remove_demo_data(a.yes)
     if a.cmd == "verify-erasure":
         return verify_erasure(a.user_id, a.email, a.name)
+    if a.cmd == "retention":
+        from .services.retention import run
+
+        with SessionLocal() as db:
+            result = run(db, dry_run=a.dry_run)
+        print(("Would remove" if a.dry_run else "Removed") + ":", ", ".join(f"{k} {v}" for k, v in result.items()))
+        return 0
     return restore_check(a.json)
 
 

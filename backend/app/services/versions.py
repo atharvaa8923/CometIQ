@@ -292,6 +292,23 @@ def _catalog_diff(a: CatalogVersion | None, b: CatalogVersion | None) -> dict:
             "programs_removed": sorted({p["name"] for p in sa.get("programs", [])} - {p["name"] for p in sb.get("programs", [])})}
 
 
+def attribute(a_stored: float, b_stored: float, a_cur: float, b_cur: float, b_syl_a_demand: float, a_syl_b_demand: float) -> dict:
+    """Split the score change B − A into course revision, demand change and method update (see compare()).
+
+    The parts are shown to one decimal; they are rounded so that the shown parts always add up to the shown total
+    (the method part, usually 0, absorbs the rounding remainder; if it is exactly 0 the larger part does)."""
+    revision = ((b_syl_a_demand - a_cur) + (b_cur - a_syl_b_demand)) / 2
+    demand = ((a_syl_b_demand - a_cur) + (b_cur - b_syl_a_demand)) / 2
+    method = (b_stored - b_cur) - (a_stored - a_cur)
+    total = round(b_stored - a_stored, 1)
+    parts = {"course_revision": round(revision, 1), "demand_change": round(demand, 1), "method_update": round(method, 1)}
+    rest = round(total - sum(parts.values()), 1)
+    if rest:
+        key = "method_update" if parts["method_update"] else max(("course_revision", "demand_change"), key=lambda k: abs(parts[k]))
+        parts[key] = round(parts[key] + rest, 1)
+    return {"total": total, **parts}
+
+
 def compare(db: Session, a: GapAnalysis, b: GapAnalysis) -> dict:
     """Explain the change from report A (earlier) to report B (later).
 
@@ -319,10 +336,8 @@ def compare(db: Session, a: GapAnalysis, b: GapAnalysis) -> dict:
     (ra_cur, A_cur), (_, B_cur) = s(ska, sva.topics, da, na), s(skb, svb.topics, dbm, nb)
     _, sB_dA = s(skb, svb.topics, da, na)
     _, sA_dB = s(ska, sva.topics, dbm, nb)
-    revision = ((sB_dA - A_cur) + (B_cur - sA_dB)) / 2
-    demand_eff = ((sA_dB - A_cur) + (B_cur - sB_dA)) / 2
-    method = (b.score - B_cur) - (a.score - A_cur)
-    total = round(b.score - a.score, 1)
+    effects = attribute(a.score, b.score, A_cur, B_cur, sB_dA, sA_dB)
+    total = effects.pop("total")
 
     # per-skill changes with the reason for each
     stored_a = {r["name"]: r for r in a.result.get("skills", [])}
@@ -359,7 +374,7 @@ def compare(db: Session, a: GapAnalysis, b: GapAnalysis) -> dict:
         "from": {"analysis_id": a.id, "score": a.score, "created_at": a.created_at, "syllabus_version": sva.version, "semester": sva.semester},
         "to": {"analysis_id": b.id, "score": b.score, "created_at": b.created_at, "syllabus_version": svb.version, "semester": svb.semester},
         "total": total,
-        "effects": {"course_revision": round(revision, 1), "demand_change": round(demand_eff, 1), "method_update": round(method, 1)},
+        "effects": effects,
         "method": {"scoring_from": a.scoring_version, "scoring_to": b.scoring_version, "taxonomy_from": a.taxonomy_version,
                    "taxonomy_to": b.taxonomy_version, "current_scoring": SCORING_VERSION, "current_taxonomy": tax},
         "syllabus": {"same_version": sva.id == svb.id, **_syllabus_diff(sva, svb)},

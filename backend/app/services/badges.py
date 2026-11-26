@@ -12,11 +12,26 @@ import secrets
 from collections import defaultdict
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..models import (Application, Course, CurriculumMapEntry, Evidence, GapDecision, GapReview, JobSkill, Skill, SkillBadge,
-                      StudentCourse, Syllabus, SyllabusVersion, User)
+from ..db import savepoint
+from ..models import (
+    Application,
+    Course,
+    CurriculumMapEntry,
+    Evidence,
+    GapDecision,
+    GapReview,
+    JobSkill,
+    Skill,
+    SkillBadge,
+    StudentCourse,
+    Syllabus,
+    SyllabusVersion,
+    User,
+)
 
 FAILING = {"F", "D", "D+", "D-", "W", "I", "U", "NC", "NF", "WF"}
 
@@ -38,21 +53,32 @@ def term_key(term: str | None) -> tuple[int, int] | None:
 
 def faculty_basis(db: Session, org_id: str) -> dict[str, dict[int, dict]]:
     """{course_id: {skill_id: {"level", "source", ...}}} — what faculty have confirmed each course teaches."""
+    from ..models import GapAnalysis
+
     out: dict[str, dict[int, dict]] = defaultdict(dict)
-    courses = {c.code.upper(): c.id for c in db.scalars(select(Course).where(Course.org_id == org_id))}
-    seen: set[str] = set()
-    for syl in db.scalars(select(Syllabus).where(Syllabus.org_id == org_id).order_by(Syllabus.created_at.desc())):
-        cid = syl.course_id or courses.get((syl.code or "").upper())
-        if not cid or cid in seen or not syl.analyses:
+    courses = {c_code.upper(): cid for cid, c_code in db.execute(select(Course.id, Course.code).where(Course.org_id == org_id))}
+    # latest analysis of the most recent syllabus of each course (one query)
+    rows = db.execute(select(Syllabus.id, Syllabus.course_id, Syllabus.code, Syllabus.semester, Syllabus.created_at,
+                             GapAnalysis.id, GapAnalysis.syllabus_version_id, GapAnalysis.created_at)
+                      .join(GapAnalysis, GapAnalysis.syllabus_id == Syllabus.id).where(Syllabus.org_id == org_id)).all()
+    best_syl: dict[str, tuple] = {}
+    for syl_id, cid, code, sem, syl_at, ga_id, sv_id, ga_at in rows:
+        course_id = cid or courses.get((code or "").upper())
+        if not course_id:
             continue
-        seen.add(cid)  # the most recent syllabus of each course
-        ga = syl.analyses[0]
-        sv = db.get(SyllabusVersion, ga.syllabus_version_id) if ga.syllabus_version_id else None
-        for rv in db.scalars(select(GapReview).where(GapReview.analysis_id == ga.id, GapReview.faculty_status == "practiced")):
-            out[cid][rv.skill_id] = {"level": "practiced", "source": "faculty review", "syllabus_id": syl.id,
-                                     "syllabus_version": sv.version if sv else None, "syllabus_semester": sv.semester if sv else syl.semester,
-                                     "confirmed_by": rv.reviewer.full_name if rv.reviewer else None,
-                                     "confirmed_at": rv.updated_at.isoformat() if rv.updated_at else None}
+        cur = best_syl.get(course_id)
+        if not cur or (syl_at, ga_at) > (cur[1], cur[3]):
+            best_syl[course_id] = (syl_id, syl_at, ga_id, ga_at, sv_id, sem)
+    if best_syl:
+        versions = {v.id: v for v in db.scalars(select(SyllabusVersion).where(SyllabusVersion.id.in_([x[4] for x in best_syl.values() if x[4]])))}
+        by_ga = {x[2]: (cid, x) for cid, x in best_syl.items()}
+        for rv, who in db.execute(select(GapReview, User.full_name).outerjoin(User, User.id == GapReview.reviewer_id)
+                                  .where(GapReview.analysis_id.in_(list(by_ga)), GapReview.faculty_status == "practiced")):
+            cid, x = by_ga[rv.analysis_id]
+            sv = versions.get(x[4])
+            out[cid][rv.skill_id] = {"level": "practiced", "source": "faculty review", "syllabus_id": x[0],
+                                     "syllabus_version": sv.version if sv else None, "syllabus_semester": sv.semester if sv else x[5],
+                                     "confirmed_by": who, "confirmed_at": rv.updated_at.isoformat() if rv.updated_at else None}
     for e in db.scalars(select(CurriculumMapEntry).where(CurriculumMapEntry.org_id == org_id, CurriculumMapEntry.level.in_(("P", "M")))):
         lvl = "mastered" if e.level == "M" else "practiced"
         cur = out[e.course_id].get(e.skill_id)
@@ -67,15 +93,20 @@ def verified_completions(db: Session, org_id: str, student_id: str | None = None
     q = select(Evidence).where(Evidence.org_id == org_id, Evidence.kind == "course", Evidence.status == "verified", Evidence.course_id.is_not(None))
     if student_id:
         q = q.where(Evidence.student_id == student_id)
-    grades = {(sc.user_id, sc.course_id): sc for sc in db.scalars(select(StudentCourse))}
+    evs = list(db.scalars(q))
+    if not evs:
+        return []
+    grades = {(sc.user_id, sc.course_id): sc for sc in db.scalars(select(StudentCourse).where(
+        StudentCourse.user_id.in_({e.student_id for e in evs}), StudentCourse.course_id.in_({e.course_id for e in evs})))}
+    names = dict(db.execute(select(User.id, User.full_name).where(User.id.in_({e.reviewer_id for e in evs if e.reviewer_id}))).all()) \
+        if any(e.reviewer_id for e in evs) else {}
     out = []
-    for e in db.scalars(q):
+    for e in evs:
         sc = grades.get((e.student_id, e.course_id))
         if sc and sc.grade and sc.grade.strip().upper() in FAILING:
             continue
-        reviewer = db.get(User, e.reviewer_id) if e.reviewer_id else None
         out.append({"student_id": e.student_id, "course_id": e.course_id, "term": e.issued_on or (sc.term if sc else None),  # the advisor-verified term wins over the self-reported plan
-                    "evidence_id": e.id, "verified_by": reviewer.full_name if reviewer else None,
+                    "evidence_id": e.id, "verified_by": names.get(e.reviewer_id),
                     "verified_at": e.reviewed_at.isoformat() if e.reviewed_at else None})
     return out
 
@@ -91,12 +122,18 @@ def sync(db: Session, org_id: str, student_id: str | None = None) -> int:
             key = (comp["student_id"], sid, comp["course_id"])
             if key in have:
                 continue
-            db.add(SkillBadge(org_id=org_id, student_id=comp["student_id"], skill_id=sid, course_id=comp["course_id"],
-                              course_code=codes.get(comp["course_id"], ""), level=b["level"], term=comp["term"],
-                              basis={"faculty": b, "completion": {k: comp[k] for k in ("evidence_id", "verified_by", "verified_at", "term")}},
-                              public_token=secrets.token_urlsafe(18)))
             have.add(key)
-            n += 1
+            try:
+                # badges are issued from several places (evidence approval, faculty review, a nightly sync); if another
+                # request issued this one a moment ago, the unique key stops a duplicate and only this insert is undone
+                with savepoint(db):
+                    db.add(SkillBadge(org_id=org_id, student_id=comp["student_id"], skill_id=sid, course_id=comp["course_id"],
+                                      course_code=codes.get(comp["course_id"], ""), level=b["level"], term=comp["term"],
+                                      basis={"faculty": b, "completion": {k: comp[k] for k in ("evidence_id", "verified_by", "verified_at", "term")}},
+                                      public_token=secrets.token_urlsafe(18)))
+                n += 1
+            except IntegrityError:
+                pass
     db.flush()
     if n:
         from .stacks import check_completions

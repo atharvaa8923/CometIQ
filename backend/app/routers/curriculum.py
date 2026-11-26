@@ -270,7 +270,10 @@ def _program(db: Session, user: User, pid: str) -> Program:
 
 @router.get("/programs/{pid}/map")
 def program_map(pid: str, target: str = gapsvc.ALL, user: User = Depends(faculty), db: Session = Depends(get_db)):
-    return cmap.build(db, _program(db, user, pid), target)
+    from ..services.cache import cached
+
+    prog = _program(db, user, pid)
+    return cached(db, user.org_id, ("map", pid, target), lambda: cmap.build(db, prog, target))
 
 
 @router.get("/programs/{pid}/map.xlsx")
@@ -340,7 +343,9 @@ def decision_outcomes(did: str, user: User = Depends(faculty), db: Session = Dep
 # ── Dean's program scorecard ───────────────────────────────────────────────────
 @router.get("/scorecard")
 def scorecard(target: str = gapsvc.ALL, user: User = Depends(faculty), db: Session = Depends(get_db)):
-    return scsvc.build(db, user.org_id, target)
+    from ..services.cache import cached
+
+    return cached(db, user.org_id, ("scorecard", target), lambda: scsvc.build(db, user.org_id, target))
 
 
 

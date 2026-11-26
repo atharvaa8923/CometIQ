@@ -61,6 +61,9 @@ cd backend && ../.venv/bin/python -m pytest -q
 # against PostgreSQL:
 TEST_DATABASE_URL=postgresql+psycopg://user:pass@host/db ../.venv/bin/python -m pytest -q
 ```
+`tests/test_properties.py` checks scoring invariants on thousands of random inputs (Hypothesis). Performance:
+`scripts/perf_profile.py` (latency and query count per endpoint at realistic scale) and `scripts/load_test.py` (many
+signed-in users against a running server); results in [docs/performance/LOAD-TEST.md](docs/performance/LOAD-TEST.md).
 
 ---
 
@@ -166,7 +169,9 @@ cd backend && ../.venv/bin/alembic revision --autogenerate -m "describe the chan
 ### Production readiness
 Password reset and notification emails, a background job queue for AI work with a per-institution Claude budget, privacy
 controls (consent, data export, account deletion), WCAG 2.1 AA accessibility (axe: 0 violations), monitoring (request IDs,
-JSON logs, Sentry, readiness checks), full UTD catalog and official-syllabus import via Nebula. See
+JSON logs, Sentry, readiness checks), full UTD catalog and official-syllabus import via Nebula. Under load: about 104 requests/s
+with no errors on 4 shared cores (3 workers, PostgreSQL), per-user rate limits on expensive endpoints, duplicate-submission
+protection (idempotency keys), one error format on every endpoint, PostgreSQL full-text search and daily data retention. See
 [LAUNCH-CHECKLIST.md](LAUNCH-CHECKLIST.md) for the institutional steps before real students use it.
 
 ### What has and hasn't been tested live

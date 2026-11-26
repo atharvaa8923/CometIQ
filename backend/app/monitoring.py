@@ -74,9 +74,9 @@ async def request_id_middleware(request, call_next):
             import sentry_sdk
 
             sentry_sdk.capture_exception()
-        from fastapi.responses import JSONResponse
+        from .errors import respond
 
-        response = JSONResponse({"detail": "Something went wrong on our side. Please try again.", "request_id": rid}, status_code=500)
+        response = respond(500, "Something went wrong on our side. Please try again.")
     finally:
         request_id.reset(token)
     ms = (time.perf_counter() - start) * 1000

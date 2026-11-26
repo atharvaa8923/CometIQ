@@ -23,6 +23,8 @@ def migrate() -> None:
     with engine.begin() as conn:
         if conn.dialect.name == "postgresql":
             # Several instances may start together: only one migrates at a time (released at commit).
+            conn.exec_driver_sql("SET LOCAL statement_timeout = 0")  # index builds can take longer than a request may
+            conn.exec_driver_sql("SET LOCAL lock_timeout = 0")
             conn.exec_driver_sql("SELECT pg_advisory_xact_lock(724001)")
             tables = set(inspect(conn).get_table_names())
         cfg.attributes["connection"] = conn

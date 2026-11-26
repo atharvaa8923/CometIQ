@@ -26,12 +26,27 @@ def _own(db: Session, user: User, sid: str) -> Syllabus:
     return s
 
 
-def _brief(s: Syllabus) -> dict:
-    last = s.analyses[0] if s.analyses else None
+def _brief(s: Syllabus, latest: dict | None | bool = False) -> dict:
+    """latest: the latest analysis as a dict (from _latest_analyses), None if there is none, or False to load it."""
+    if latest is False:
+        last = s.analyses[0] if s.analyses else None
+        latest = {"id": last.id, "score": last.score, "target": last.target, "created_at": last.created_at} if last else None
     return {"id": s.id, "title": s.title, "code": s.code, "semester": s.semester, "filename": s.filename,
             "course_id": s.course_id, "skill_count": len(s.skills), "created_at": s.created_at,
             "pilot_approved": s.pilot_approved, "approved_by": s.approved_by, "approved_at": s.approved_at, "approval_note": s.approval_note,
-            "latest": {"id": last.id, "score": last.score, "target": last.target, "created_at": last.created_at} if last else None}
+            "latest": latest}
+
+
+def _latest_briefs(db: Session, syllabus_ids: list[str]) -> dict[str, dict]:
+    """Latest analysis per syllabus, columns only (the full result JSON is large and not needed for a list)."""
+    if not syllabus_ids:
+        return {}
+    rows = db.execute(select(GapAnalysis.syllabus_id, GapAnalysis.id, GapAnalysis.score, GapAnalysis.target, GapAnalysis.created_at)
+                      .where(GapAnalysis.syllabus_id.in_(syllabus_ids)).order_by(GapAnalysis.created_at.desc()))
+    out: dict[str, dict] = {}
+    for sid, aid, score, target, created in rows:
+        out.setdefault(sid, {"id": aid, "score": score, "target": target, "created_at": created})
+    return out
 
 
 @router.get("/targets")
@@ -53,7 +68,9 @@ def list_syllabi(user: User = Depends(faculty), db: Session = Depends(get_db)):
     q = select(Syllabus).where(Syllabus.org_id == user.org_id)
     if user.role != "admin":
         q = q.where(Syllabus.owner_id == user.id)
-    return [_brief(s) for s in db.scalars(q.order_by(Syllabus.created_at.desc()))]
+    syllabi = list(db.scalars(q.order_by(Syllabus.created_at.desc())))
+    latest = _latest_briefs(db, [s.id for s in syllabi])
+    return [_brief(s, latest.get(s.id)) for s in syllabi]
 
 
 @router.post("/syllabi", status_code=201)

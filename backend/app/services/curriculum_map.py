@@ -19,41 +19,93 @@ RANK = {"-": 0, "I": 1, "P": 2, "M": 3}
 
 
 def program_courses(program: Program) -> list[tuple[Course, bool]]:
+    """(course, is_core) for every course in the program: core first, then concentration courses (loaded in bulk)."""
+    from sqlalchemy.orm import object_session
+
+    db = object_session(program)
+    core_ids = [pc.course_id for pc in program.core]
+    conc_ids = [cc.course_id for conc in program.concentrations for cc in conc.courses]
+    found = {c.id: c for c in db.scalars(select(Course).where(Course.id.in_(set(core_ids) | set(conc_ids))))}
     seen, out = set(), []
-    for pc in sorted(program.core, key=lambda x: x.course.code):
-        if pc.course.id not in seen:
-            seen.add(pc.course.id)
-            out.append((pc.course, True))
-    for conc in program.concentrations:
-        for cc in sorted(conc.courses, key=lambda x: x.course.code):
-            if cc.course.id not in seen:
-                seen.add(cc.course.id)
-                out.append((cc.course, False))
+    for cid in sorted(core_ids, key=lambda i: found[i].code if i in found else ""):
+        if cid in found and cid not in seen:
+            seen.add(cid)
+            out.append((found[cid], True))
+    for cid in sorted(conc_ids, key=lambda i: found[i].code if i in found else ""):
+        if cid in found and cid not in seen:
+            seen.add(cid)
+            out.append((found[cid], False))
+    return out
+
+
+def program_course_map(db: Session, org_id: str) -> dict[str, list[tuple[str, bool]]]:
+    """{program_id: [(course_id, is_core), ...]} for every program of the organization, in two queries."""
+    from ..models import Concentration, ConcentrationCourse, ProgramCore
+
+    out: dict[str, dict[str, bool]] = {}
+    for pid, cid in db.execute(select(ProgramCore.program_id, ProgramCore.course_id).join(Program, Program.id == ProgramCore.program_id)
+                               .where(Program.org_id == org_id)):
+        out.setdefault(pid, {})[cid] = True
+    for pid, cid in db.execute(select(Concentration.program_id, ConcentrationCourse.course_id)
+                               .join(Concentration, Concentration.id == ConcentrationCourse.concentration_id)
+                               .join(Program, Program.id == Concentration.program_id).where(Program.org_id == org_id)):
+        out.setdefault(pid, {}).setdefault(cid, False)
+    return {pid: list(d.items()) for pid, d in out.items()}
+
+
+def evidence_for_courses(db: Session, org_id: str, courses: list[Course]) -> dict[str, dict]:
+    """Levels from each course's latest analyzed syllabus, for many courses in a constant number of queries:
+    {course_id: {skill_id: (level, source, detail, unverified)}}."""
+    if not courses:
+        return {}
+    by_id = {c.id: c for c in courses}
+    by_code = {c.code.upper(): c.id for c in courses}
+    rows = db.execute(select(Syllabus.id, Syllabus.course_id, Syllabus.code, GapAnalysis.id, GapAnalysis.syllabus_version_id, GapAnalysis.created_at)
+                      .join(GapAnalysis, GapAnalysis.syllabus_id == Syllabus.id)
+                      .where(Syllabus.org_id == org_id, (Syllabus.course_id.in_(list(by_id))) | (func.upper(Syllabus.code).in_(list(by_code))))).all()
+    latest: dict[str, tuple] = {}
+    for sid_, cid, code, ga_id, sv_id, at in rows:
+        course_id = cid if cid in by_id else by_code.get((code or "").upper())
+        if course_id and (course_id not in latest or at > latest[course_id][3]):
+            latest[course_id] = (sid_, ga_id, sv_id, at)
+    if not latest:
+        return {}
+    versions = {v.id: v for v in db.scalars(select(SyllabusVersion).where(SyllabusVersion.id.in_([x[2] for x in latest.values() if x[2]])))}
+    legacy = [x[0] for x in latest.values() if not x[2]]
+    legacy_skills: dict[str, dict] = {}
+    if legacy:
+        from ..models import SyllabusSkill
+
+        for syl_id, name, mentions in db.execute(select(SyllabusSkill.syllabus_id, Skill.name, SyllabusSkill.mentions)
+                                                 .join(Skill, Skill.id == SyllabusSkill.skill_id).where(SyllabusSkill.syllabus_id.in_(legacy))):
+            legacy_skills.setdefault(syl_id, {})[name] = {"mentions": mentions}
+    ids = dict(db.execute(select(Skill.name, Skill.id)).all())
+    from ..models import User
+
+    reviews: dict[str, list] = {}
+    for rv, who in db.execute(select(GapReview, User.full_name).outerjoin(User, User.id == GapReview.reviewer_id)
+                              .where(GapReview.analysis_id.in_([x[1] for x in latest.values()]))):
+        reviews.setdefault(rv.analysis_id, []).append((rv, who))
+    out: dict[str, dict] = {}
+    for course_id, (syl_id, ga_id, sv_id, _) in latest.items():
+        sv = versions.get(sv_id)
+        skills = sv.skills if sv else legacy_skills.get(syl_id, {})
+        label = (f"syllabus v{sv.version}" + (f" ({sv.semester})" if sv.semester else "")) if sv else "syllabus"
+        ev: dict[int, tuple] = {}
+        for name, info in skills.items():
+            if name in ids:
+                ev[ids[name]] = ("P" if info["mentions"] >= 2 else "I", "syllabus signal", f"{info['mentions']} mention(s) in {label}; not yet reviewed", True)
+        for rv, who in reviews.get(ga_id, []):
+            lvl = {"practiced": "P", "mentioned_only": "I"}.get(rv.faculty_status, "-")
+            ev[rv.skill_id] = (lvl, "faculty review", f"{rv.faculty_status.replace('_', ' ')} — reviewed by {who or 'faculty'} on {label}"
+                               + (f": {rv.rationale}" if rv.rationale else ""), False)
+        out[course_id] = ev
     return out
 
 
 def latest_syllabus_evidence(db: Session, org_id: str, course: Course) -> dict:
-    """Levels from the latest analyzed syllabus of a course: {skill_id: (level, source, detail, unverified)}."""
-    syl = db.scalar(select(Syllabus).where(Syllabus.org_id == org_id, (Syllabus.course_id == course.id) | (func.upper(Syllabus.code) == course.code.upper()))
-                    .join(GapAnalysis, GapAnalysis.syllabus_id == Syllabus.id).order_by(GapAnalysis.created_at.desc()).limit(1))
-    if not syl:
-        return {}
-    ga = syl.analyses[0]
-    out: dict[int, tuple] = {}
-    sv = db.get(SyllabusVersion, ga.syllabus_version_id) if ga.syllabus_version_id else None
-    skills = sv.skills if sv else {ss.skill.name: {"mentions": ss.mentions} for ss in syl.skills}
-    ids = dict(db.execute(select(Skill.name, Skill.id).where(Skill.name.in_(list(skills)))).all()) if skills else {}
-    label = f"syllabus v{sv.version}" + (f" ({sv.semester})" if sv and sv.semester else "") if sv else "syllabus"
-    for name, info in skills.items():
-        if name in ids:
-            lvl = "P" if info["mentions"] >= 2 else "I"
-            out[ids[name]] = (lvl, "syllabus signal", f"{info['mentions']} mention(s) in {label}; not yet reviewed", True)
-    for rv in db.scalars(select(GapReview).where(GapReview.analysis_id == ga.id)):
-        lvl = {"practiced": "P", "mentioned_only": "I"}.get(rv.faculty_status, "-")
-        who = rv.reviewer.full_name if rv.reviewer else "faculty"
-        out[rv.skill_id] = (lvl, "faculty review", f"{rv.faculty_status.replace('_', ' ')} — reviewed by {who} on {label}"
-                            + (f": {rv.rationale}" if rv.rationale else ""), False)
-    return out
+    """Levels from the latest analyzed syllabus of one course (see evidence_for_courses)."""
+    return evidence_for_courses(db, org_id, [course]).get(course.id, {})
 
 
 def build(db: Session, program: Program, target: str = gapsvc.ALL, top_n: int = 20,
@@ -71,9 +123,14 @@ def build(db: Session, program: Program, target: str = gapsvc.ALL, top_n: int = 
                                    .group_by(SkillBadge.skill_id)).all()) if skill_ids else {}
     cells: dict[str, dict] = {}
     course_rows = []
+    all_ev = evidence_for_courses(db, org, [c for c, _ in courses])
+    all_cat: dict[str, set[int]] = {}
+    for cid, sid in db.execute(select(CourseSkill.course_id, CourseSkill.skill_id).where(
+            CourseSkill.course_id.in_([c.id for c, _ in courses]), CourseSkill.weight >= 1.0)):
+        all_cat.setdefault(cid, set()).add(sid)
     for c, is_core in courses:
-        syl_ev = latest_syllabus_evidence(db, org, c)
-        cat = {cs.skill_id for cs in db.scalars(select(CourseSkill).where(CourseSkill.course_id == c.id, CourseSkill.weight >= 1.0))}
+        syl_ev = all_ev.get(c.id, {})
+        cat = all_cat.get(c.id, set())
         row = {}
         for sid in skill_ids:
             e = by_entry.get((c.id, sid))

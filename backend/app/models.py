@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    JSON, Boolean, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint, false, true,
+    JSON, Boolean, CheckConstraint, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint, false, true,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -97,7 +97,7 @@ class CourseSkill(Base):
     weight: Mapped[float] = mapped_column(Float, default=1.0)
     source: Mapped[str] = mapped_column(String(20), default="catalog")  # catalog|syllabus|forge
 
-    skill: Mapped[Skill] = relationship()
+    skill: Mapped[Skill] = relationship(lazy="joined")
 
 
 class Program(Base):
@@ -131,7 +131,7 @@ class ProgramCore(Base):
     or_group: Mapped[int] = mapped_column(Integer, default=0)
     sort: Mapped[int] = mapped_column(Integer, default=0)
 
-    course: Mapped[Course] = relationship()
+    course: Mapped[Course] = relationship(lazy="joined")
 
 
 class Concentration(Base):
@@ -151,7 +151,7 @@ class ConcentrationCourse(Base):
     concentration_id: Mapped[str] = mapped_column(ForeignKey("concentrations.id", ondelete="CASCADE"), index=True)
     course_id: Mapped[str] = mapped_column(ForeignKey("courses.id", ondelete="CASCADE"))
 
-    course: Mapped[Course] = relationship()
+    course: Mapped[Course] = relationship(lazy="joined")
 
 
 # ── Industry demand ────────────────────────────────────────────────────────────
@@ -173,7 +173,7 @@ class Job(Base):
     is_open: Mapped[bool] = mapped_column(Boolean, default=True)
     posted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
-    skills: Mapped[list["JobSkill"]] = relationship(cascade="all, delete-orphan")
+    skills: Mapped[list["JobSkill"]] = relationship(cascade="all, delete-orphan", lazy="selectin")
 
 
 class JobSkill(Base):
@@ -184,7 +184,7 @@ class JobSkill(Base):
     skill_id: Mapped[int] = mapped_column(ForeignKey("skills.id", ondelete="CASCADE"), index=True)
     importance: Mapped[str] = mapped_column(String(20), default="required")  # required|preferred
 
-    skill: Mapped[Skill] = relationship()
+    skill: Mapped[Skill] = relationship(lazy="joined")
 
 
 # ── CometGap ───────────────────────────────────────────────────────────────────
@@ -206,7 +206,7 @@ class Syllabus(Base):
     approval_note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
-    skills: Mapped[list["SyllabusSkill"]] = relationship(cascade="all, delete-orphan")
+    skills: Mapped[list["SyllabusSkill"]] = relationship(cascade="all, delete-orphan", lazy="selectin")
     analyses: Mapped[list["GapAnalysis"]] = relationship(cascade="all, delete-orphan", order_by="GapAnalysis.created_at.desc()")
 
 
@@ -219,7 +219,7 @@ class SyllabusSkill(Base):
     evidence: Mapped[str | None] = mapped_column(Text)
     excerpts: Mapped[list | None] = mapped_column(JSON)  # up to 3 syllabus lines where the skill appears
 
-    skill: Mapped[Skill] = relationship()
+    skill: Mapped[Skill] = relationship(lazy="joined")
 
 
 class JobSample(Base):
@@ -292,7 +292,7 @@ class GapReview(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 
-    skill: Mapped[Skill] = relationship()
+    skill: Mapped[Skill] = relationship(lazy="joined")
     reviewer: Mapped[User | None] = relationship()
 
 
@@ -341,7 +341,7 @@ class GapDecision(Base):
     share_with_partners: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     partner_note: Mapped[str | None] = mapped_column(Text)
 
-    skill: Mapped[Skill] = relationship()
+    skill: Mapped[Skill] = relationship(lazy="joined")
 
 
 class CurriculumProposal(Base):
@@ -441,8 +441,8 @@ class SkillBadge(Base):
     partner: Mapped[str | None] = mapped_column(String(200))      # employer whose sponsored project the student completed
     project_id: Mapped[str | None] = mapped_column(String(32))
 
-    skill: Mapped[Skill] = relationship()
-    course: Mapped[Course] = relationship()
+    skill: Mapped[Skill] = relationship(lazy="joined")
+    course: Mapped[Course] = relationship(lazy="joined")
 
 
 class SkillStack(Base):
@@ -502,7 +502,7 @@ class SponsoredProject(Base):
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    skill: Mapped[Skill] = relationship()
+    skill: Mapped[Skill] = relationship(lazy="joined")
 
 
 # ── CometForge ─────────────────────────────────────────────────────────────────
@@ -548,7 +548,7 @@ class StudentCourse(Base):
     term: Mapped[str | None] = mapped_column(String(20))
     grade: Mapped[str | None] = mapped_column(String(4))
 
-    course: Mapped[Course] = relationship()
+    course: Mapped[Course] = relationship(lazy="joined")
 
 
 # ── CometMatch ─────────────────────────────────────────────────────────────────
@@ -697,3 +697,97 @@ class AuditLog(Base):
     action: Mapped[str] = mapped_column(String(80))
     detail: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class IdempotencyKey(Base):
+    """A client-chosen key for a write request: a retried or double-clicked submission returns the first response instead
+    of acting twice. Kept for a day."""
+    __tablename__ = "idempotency_keys"
+    __table_args__ = (CheckConstraint("status IN ('pending', 'done')", name="ck_idempotency_keys_status"),)
+    key: Mapped[str] = mapped_column(String(120), primary_key=True)   # user id + client key
+    user_id: Mapped[str] = mapped_column(String(32))
+    method: Mapped[str] = mapped_column(String(10))
+    path: Mapped[str] = mapped_column(String(300))
+    status: Mapped[str] = mapped_column(String(10), default="pending")
+    response_status: Mapped[int | None] = mapped_column(Integer)
+    response_body: Mapped[bytes | None] = mapped_column(LargeBinary)
+    response_type: Mapped[str | None] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
+class CacheVersion(Base):
+    """Bumped whenever data that cached views depend on changes; part of every cache key (shared by all app instances)."""
+    __tablename__ = "cache_versions"
+    scope: Mapped[str] = mapped_column(String(40), primary_key=True)   # an organization id, or "*" for shared data such as job postings
+    version: Mapped[int] = mapped_column(Integer, default=0)
+
+
+# ── Indexes for foreign keys and common filters ─────────────────────────────────
+# PostgreSQL does not index foreign keys automatically; these keep joins and ON DELETE actions fast.
+from sqlalchemy import CheckConstraint, Index  # noqa: E402
+
+_FK_INDEXES = [
+    (CurriculumMapEntry, "set_by_id"), (CurriculumMapEntry, "skill_id"), (CurriculumMapEntry, "course_id"),
+    (Evidence, "course_id"), (Evidence, "reviewer_id"), (JobSample, "created_by"), (PlanReview, "advisor_id"),
+    (ProgramCore, "course_id"), (SkillBadge, "course_id"), (SkillBadge, "skill_id"), (SkillStack, "created_by"),
+    (StudentCourse, "course_id"), (Syllabus, "course_id"), (ConcentrationCourse, "course_id"),
+    (StudentProfile, "concentration_id"), (StudentProfile, "program_id"), (SyllabusSkill, "skill_id"), (SyllabusVersion, "created_by"),
+    (GapAnalysis, "sample_id"), (GapAnalysis, "catalog_version_id"), (GapAnalysis, "syllabus_version_id"), (ForgeDraft, "analysis_id"),
+    (GapReview, "skill_id"), (GapReview, "reviewer_id"), (CurriculumProposal, "forge_draft_id"), (CurriculumProposal, "author_id"),
+    (CurriculumProposal, "base_version_id"), (GapDecision, "skill_id"), (GapDecision, "forge_draft_id"), (GapDecision, "reviewer_id"),
+    (GapDecision, "analysis_id"), (ProposalComment, "author_id"), (ProposalReview, "reviewer_id"), (SponsoredProject, "decision_id"),
+    (SponsoredProject, "forge_draft_id"), (SponsoredProject, "skill_id"),
+]
+for _cls, _col in _FK_INDEXES:
+    Index(f"ix_{_cls.__tablename__}_{_col}", getattr(_cls, _col))
+
+Index("ix_jobs_open_family", Job.is_open, Job.role_family)
+Index("ix_jobs_source_posted", Job.source, Job.posted_at)
+Index("ix_gap_analyses_syllabus_created", GapAnalysis.syllabus_id, GapAnalysis.created_at)
+Index("ix_evidence_student_status", Evidence.student_id, Evidence.status)
+Index("ix_skill_badges_student_status", SkillBadge.student_id, SkillBadge.status)
+Index("ix_gap_decisions_syllabus_status", GapDecision.syllabus_id, GapDecision.status)
+Index("ix_student_courses_user_status", StudentCourse.user_id, StudentCourse.status)
+Index("ix_users_org_role", User.org_id, User.role)
+Index("ix_syllabi_org_code", Syllabus.org_id, Syllabus.code)
+Index("ix_audit_log_org_created", AuditLog.org_id, AuditLog.created_at)
+Index("ix_tasks_status_created", Task.status, Task.created_at)
+_ACTIVE_DECISION = GapDecision.status.in_(("open", "drafted", "implemented"))
+Index("uq_gap_decisions_one_active", GapDecision.syllabus_id, GapDecision.skill_id, unique=True,
+      postgresql_where=_ACTIVE_DECISION, sqlite_where=_ACTIVE_DECISION)
+
+
+# ── Value constraints: the database rejects values the application would never write ──
+def _in(col: str, *values: str) -> str:
+    return f"{col} IN ({', '.join(repr(v) for v in values)})"
+
+
+_CHECKS = [
+    (User, "role", _in("role", *ROLES)),
+    (StudentCourse, "status", _in("status", "completed", "enrolled", "planned")),
+    (JobSkill, "importance", _in("importance", "required", "preferred")),
+    (CourseSkill, "weight", "weight >= 0"),
+    (GapAnalysis, "score", "score >= 0 AND score <= 100"),
+    (GapReview, "faculty_status", _in("faculty_status", "practiced", "mentioned_only", "not_covered", "not_relevant")),
+    (GapReview, "decision", _in("decision", "confirmed", "corrected")),
+    (GapReview, "action", _in("action", "none", "planned", "done")),
+    (GapDecision, "decision", _in("decision", "add_here", "covered_elsewhere", "defer", "out_of_scope")),
+    (GapDecision, "status", _in("status", "open", "drafted", "implemented", "superseded")),
+    (CurriculumProposal, "status", _in("status", "draft", "in_review", "changes_requested", "approved", "adopted", "withdrawn")),
+    (CurriculumProposal, "required_approvals", "required_approvals >= 1"),
+    (ProposalReview, "vote", _in("vote", "approve", "request_changes")),
+    (CurriculumMapEntry, "level", _in("level", "I", "P", "M", "-")),
+    (SkillBadge, "level", _in("level", "practiced", "mastered")),
+    (SkillBadge, "status", _in("status", "active", "revoked")),
+    (Evidence, "kind", _in("kind", "course", "certification", "project", "experience")),
+    (Evidence, "status", _in("status", "pending", "verified", "rejected")),
+    (Evidence, "bonus_points", "bonus_points >= 0 AND bonus_points <= 20"),
+    (Application, "status", _in("status", "applied", "shortlisted", "interview", "offer", "hired", "rejected")),
+    (PlanReview, "status", _in("status", "submitted", "approved", "changes_requested")),
+    (Task, "status", _in("status", "queued", "running", "done", "failed")),
+    (SponsoredProject, "status", _in("status", "offered", "accepted", "declined", "completed", "withdrawn")),
+    (SponsoredProject, "kind", _in("kind", "project", "dataset", "guest_session")),
+    (JobSample, "kind", _in("kind", "documented", "auto")),
+]
+for _cls, _col, _sql in _CHECKS:
+    _cls.__table__.append_constraint(CheckConstraint(_sql, name=f"ck_{_cls.__tablename__}_{_col}"))

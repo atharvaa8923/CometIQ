@@ -466,7 +466,10 @@ palette, always shown with an icon and a label).
 
 | Tool | Used for |
 |---|---|
-| **pytest** | 71 end-to-end API tests |
+| **pytest** | 95 end-to-end API and database tests |
+| **Hypothesis** | Property tests: scoring invariants on thousands of random inputs |
+| **httpx (async) + py-spy** | Load test with many signed-in users, and profiling the live server under load |
+| **GitHub Actions** | CI: the test suite on PostgreSQL and SQLite, plus the frontend build |
 | **pyflakes** | Static checks for Python |
 | **TypeScript compiler** (`tsc --noEmit`) | Static checks for the frontend |
 | **Playwright + Chromium** | Browser walkthroughs and every screenshot in this document |
@@ -522,9 +525,14 @@ The 42 tables, grouped by purpose:
 
 ## 10. Testing and quality
 
-- **75 automated tests** cover every module, role permissions, migrations (upgrade with existing data and downgrade), privacy and
-  erasure, versioning and reproducibility, decisions, proposals, the curriculum map, badges and outcomes. They pass on **SQLite
-  and PostgreSQL 16**.
+- **95 automated tests** cover every module, role permissions, migrations (upgrade with existing data and downgrade), privacy and
+  erasure, versioning and reproducibility, decisions, proposals, the curriculum map, badges and outcomes, search, retention, the
+  error format, rate limits and concurrent submissions. They pass on **SQLite and PostgreSQL 16**.
+- **Property tests** (Hypothesis, 1,500 random cases per rule) check that scores stay within 0–100, that more coverage
+  never lowers a score, that a match bonus never exceeds its cap, and that the semester-comparison parts add up to the total.
+- **Load test** (`scripts/load_test.py`): about **104 requests/s** with **0 errors**, p95 0.5 s at 20 users and 1.0 s at 50.
+  Measured with 3 workers on PostgreSQL, on 4 cores shared with the database and the load generator. Before this round it
+  was 18 requests/s. See [docs/performance/LOAD-TEST.md](../performance/LOAD-TEST.md).
 - **Pilot drill** (`scripts/pilot_drill.py`), 15 checks on PostgreSQL:
   1. remove demo data;
   2. create a faculty member, a review and a decision;
@@ -538,6 +546,9 @@ The 42 tables, grouped by purpose:
   - faculty reviews were copied onto a revised syllabus version;
   - a badge used the student's self-reported term instead of the advisor-verified one;
   - a PostgreSQL-incompatible boolean default in a migration.
+  - the semester comparison rounded each part separately, so in 25% of random cases the parts did not add up to the total;
+  - two faculty members deciding on the same gap at the same moment could leave two active decisions;
+  - typing part of a word in PostgreSQL search ("analy") matched nothing, because the stemmer rewrote it.
 
 ---
 
@@ -586,10 +597,11 @@ cometiq/
 | **7. Decisions and versions** | Faculty decision records linked to CometForge, side-by-side proposed changes, versioned syllabi, catalog and job samples, reproducible reports, semester-over-semester comparison with change attribution. |
 | **8. Curriculum and badges** | Pull-request-style curriculum proposals with a change request form, AACSB I/P/M curriculum map, faculty-verified skill badges with public verification, the employer filter, and privacy-safe outcomes. |
 | **9. Management, design and partnerships** | Dean's program scorecard, syllabus copilot, program simulator, skill stacks with employer alerts, employer-sponsored projects with partner badges, and Ask CometIQ (LangGraph agent with citations). |
+| **10. Backend performance and hardening** | Batch loading and cached views (candidate ranking from 4,968 queries to 12); PostgreSQL by default, with constraints, indexes, pool and query timeouts, full-text search and daily retention; property tests; safe concurrent decisions, idempotency keys and a SKIP LOCKED task queue; one error format; per-user rate limits; several worker processes; a load test, 18 → 104 requests/s. |
 
-On GitHub, rounds 1–5 are on `main`. Rounds 6–9 are on the branches `faculty-review-pilot`, `decision-records-and-versions`,
-`curriculum-proposals-and-badges` and `scorecard-copilot-simulator-stacks-projects-ask`. Each branch builds on the previous one, so
-merging the last one brings in all four.
+On GitHub, rounds 1–5 are on `main`. Rounds 6–10 are on the branches `faculty-review-pilot`, `decision-records-and-versions`,
+`curriculum-proposals-and-badges`, `scorecard-copilot-simulator-stacks-projects-ask` and `backend-performance`. Each branch builds
+on the previous one, so merging the last one brings in all five.
 
 ---
 

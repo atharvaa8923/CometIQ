@@ -71,8 +71,12 @@ def _chain(prereqs: dict[str, dict[int, list[str]]], cid: str, memo: dict, stack
 def _plan_issues(db: Session, program_id: str, prereqs: dict, removed: set[str], core_before: set[str], codes: dict[str, str]) -> dict[str, set[str]]:
     """For each student in the program with a saved plan: the set of problems in that plan under these prerequisites."""
     out: dict[str, set[str]] = {}
-    for uid in db.scalars(select(StudentProfile.user_id).where(StudentProfile.program_id == program_id)):
-        rows = list(db.scalars(select(StudentCourse).where(StudentCourse.user_id == uid)))
+    by_student: dict[str, list] = defaultdict(list)
+    for r in db.execute(select(StudentCourse.user_id, StudentCourse.course_id, StudentCourse.status, StudentCourse.term)
+                        .join(StudentProfile, StudentProfile.user_id == StudentCourse.user_id)
+                        .where(StudentProfile.program_id == program_id)):
+        by_student[r.user_id].append(r)
+    for uid, rows in by_student.items():
         planned = [r for r in rows if r.status == "planned"]
         if not planned:
             continue

@@ -15,49 +15,91 @@ from collections import defaultdict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import Course, CourseSkill, Evidence, Job, Skill, StudentCourse, StudentProfile
+from ..models import Course, CourseSkill, Evidence, Job, Skill, SkillBadge, StudentCourse, StudentProfile
 from .gap import IMPORTANCE_W
 
 
-def student_skills(db: Session, user_id: str) -> dict[int, dict]:
-    out: dict[int, dict] = defaultdict(lambda: {"level": 0.0, "sources": []})
-    prof = db.get(StudentProfile, user_id)
-    for sid in (prof.resume_skills if prof else []) or []:
-        out[sid]["level"] = 1.0
-        out[sid]["sources"].append("Resume")
-    rows = db.execute(select(StudentCourse.status, Course.code, CourseSkill.skill_id, CourseSkill.weight)
+def students_skills(db: Session, user_ids: list[str]) -> dict[str, dict[int, dict]]:
+    """Skill levels for many students at once (a constant number of queries, whatever the number of students)."""
+    ids = list(dict.fromkeys(user_ids))
+    out: dict[str, dict[int, dict]] = {u: defaultdict(lambda: {"level": 0.0, "sources": []}) for u in ids}
+    if not ids:
+        return {}
+    for uid, skills in db.execute(select(StudentProfile.user_id, StudentProfile.resume_skills).where(StudentProfile.user_id.in_(ids))):
+        for sid in skills or []:
+            out[uid][sid]["level"] = 1.0
+            out[uid][sid]["sources"].append("Resume")
+    rows = db.execute(select(StudentCourse.user_id, StudentCourse.status, Course.code, CourseSkill.skill_id, CourseSkill.weight)
                       .join(Course, Course.id == StudentCourse.course_id)
                       .join(CourseSkill, CourseSkill.course_id == Course.id)
-                      .where(StudentCourse.user_id == user_id, StudentCourse.status.in_(("completed", "enrolled")))).all()
-    for status, code, sid, w in rows:
+                      .where(StudentCourse.user_id.in_(ids), StudentCourse.status.in_(("completed", "enrolled")))).all()
+    for uid, status, code, sid, w in rows:
         lvl = w if status == "completed" else 0.5 * w
-        out[sid]["level"] = max(out[sid]["level"], lvl)
-        out[sid]["sources"].append(code if status == "completed" else f"{code} (in progress)")
-    for e in db.scalars(select(Evidence).where(Evidence.student_id == user_id, Evidence.status.in_(("verified", "pending")))):
+        d = out[uid][sid]
+        d["level"] = max(d["level"], lvl)
+        d["sources"].append(code if status == "completed" else f"{code} (in progress)")
+    for e in db.scalars(select(Evidence).where(Evidence.student_id.in_(ids), Evidence.status.in_(("verified", "pending")))):
         lvl = 1.0 if e.status == "verified" else 0.5
         for sid in e.skills or []:
-            out[sid]["level"] = max(out[sid]["level"], lvl)
-            out[sid]["sources"].append(f"✓ {e.title}" if e.status == "verified" else f"{e.title} (pending verification)")
-    from .badges import badges_by_skill
+            d = out[e.student_id][sid]
+            d["level"] = max(d["level"], lvl)
+            d["sources"].append(f"✓ {e.title}" if e.status == "verified" else f"{e.title} (pending verification)")
+    codes: dict[tuple[str, int], set[str]] = defaultdict(set)
+    for uid, sid, code in db.execute(select(SkillBadge.student_id, SkillBadge.skill_id, SkillBadge.course_code)
+                                     .where(SkillBadge.student_id.in_(ids), SkillBadge.status == "active")):
+        codes[(uid, sid)].add(code)
+    for (uid, sid), cs in codes.items():
+        d = out[uid][sid]
+        d["level"] = 1.0
+        d["faculty_verified"] = True
+        d["sources"].insert(0, "★ Faculty-verified in " + ", ".join(sorted(cs)))
+    return {u: dict(v) for u, v in out.items()}
 
-    for sid, bs in badges_by_skill(db, user_id).items():
-        out[sid]["level"] = 1.0
-        out[sid]["faculty_verified"] = True
-        out[sid]["sources"].insert(0, "★ Faculty-verified in " + ", ".join(sorted({b.course_code for b in bs})))
-    return dict(out)
+
+def student_skills(db: Session, user_id: str) -> dict[int, dict]:
+    return students_skills(db, [user_id])[user_id]
 
 
 BONUS_CAP = 15
 
 
+def students_bonuses(db: Session, user_ids: list[str]) -> dict[str, list[dict]]:
+    out: dict[str, list[dict]] = defaultdict(list)
+    if user_ids:
+        for e in db.scalars(select(Evidence).where(Evidence.student_id.in_(list(set(user_ids))), Evidence.status == "verified",
+                                                    Evidence.bonus_points > 0)):
+            out[e.student_id].append({"title": e.title, "kind": e.kind, "points": e.bonus_points, "skills": set(e.skills or [])})
+    return out
+
+
 def student_bonuses(db: Session, user_id: str) -> list[dict]:
-    return [{"title": e.title, "kind": e.kind, "points": e.bonus_points, "skills": set(e.skills or [])}
-            for e in db.scalars(select(Evidence).where(Evidence.student_id == user_id, Evidence.status == "verified",
-                                                        Evidence.bonus_points > 0))]
+    return students_bonuses(db, [user_id]).get(user_id, [])
 
 
 def student_profile(db: Session, user_id: str) -> tuple[dict[int, dict], list[dict]]:
     return student_skills(db, user_id), student_bonuses(db, user_id)
+
+
+def open_jobs(db: Session, org_id: str) -> list:
+    """Open postings visible to an organization, with their skills, as plain read-only records (the shape score_job and
+    job_out need). Cached until any posting or the organization's data changes; rebuilding 400 ORM postings with their
+    skills on every request was the main cost of the student job list."""
+    from types import SimpleNamespace
+
+    from ..routers.jobs import job_out
+    from .cache import cached
+
+    def build():
+        rows = []
+        for j in db.scalars(select(Job).where(Job.is_open, (Job.org_id == org_id) | Job.org_id.is_(None))):
+            skills = tuple(SimpleNamespace(skill_id=js.skill_id, importance=js.importance,
+                                           skill=SimpleNamespace(id=js.skill.id, name=js.skill.name, category=js.skill.category))
+                           for js in j.skills)
+            rows.append(SimpleNamespace(id=j.id, title=j.title, company=j.company, role_family=j.role_family,
+                                        employment_type=j.employment_type, employer_id=j.employer_id, skills=skills, out=job_out(j)))
+        return rows
+
+    return cached(db, org_id, ("open_jobs",), build)
 
 
 def fit_label(score: float) -> str:

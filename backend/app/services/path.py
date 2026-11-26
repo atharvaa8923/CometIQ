@@ -26,16 +26,40 @@ class Graph:
     skills: dict[str, dict[int, float]] = field(default_factory=lambda: defaultdict(dict))
 
 
+@dataclass(frozen=True)
+class CourseInfo:
+    """The catalog fields planning needs; plain data, so the graph can be cached and shared across requests."""
+    id: str
+    org_id: str
+    code: str
+    subject: str
+    title: str
+    credits: int
+    description: str | None
+
+
 def load_graph(db: Session, org_id: str) -> Graph:
+    """The organization's catalog as a graph. Cached: rebuilt only after the catalog (or anything in the org) changes.
+    Callers must treat it as read-only (the simulator copies what it changes)."""
+    from .cache import cached
+
+    return cached(db, org_id, ("course_graph",), lambda: _build_graph(db, org_id))
+
+
+def _build_graph(db: Session, org_id: str) -> Graph:
     g = Graph()
-    g.courses = {c.id: c for c in db.scalars(select(Course).where(Course.org_id == org_id))}
+    cols = (Course.id, Course.org_id, Course.code, Course.subject, Course.title, Course.credits, Course.description)
+    g.courses = {r[0]: CourseInfo(*r) for r in db.execute(select(*cols).where(Course.org_id == org_id))}
     pre: dict[str, dict[int, list[str]]] = defaultdict(lambda: defaultdict(list))
-    for e in db.scalars(select(CoursePrereq).join(Course, Course.id == CoursePrereq.course_id).where(Course.org_id == org_id)):
-        pre[e.course_id][e.group].append(e.requires_id)
-        g.dependents[e.requires_id].add(e.course_id)
+    for course_id, group, requires_id in db.execute(select(CoursePrereq.course_id, CoursePrereq.group, CoursePrereq.requires_id)
+                                                    .join(Course, Course.id == CoursePrereq.course_id).where(Course.org_id == org_id)
+                                                    .order_by(CoursePrereq.id)):
+        pre[course_id][group].append(requires_id)
+        g.dependents[requires_id].add(course_id)
     g.prereqs = {k: dict(v) for k, v in pre.items()}
-    for cs in db.scalars(select(CourseSkill).join(Course).where(Course.org_id == org_id)):
-        g.skills[cs.course_id][cs.skill_id] = cs.weight
+    for cid, sid, w in db.execute(select(CourseSkill.course_id, CourseSkill.skill_id, CourseSkill.weight).join(Course).where(Course.org_id == org_id)):
+        g.skills[cid][sid] = w
+    g.dependents, g.skills = dict(g.dependents), dict(g.skills)   # no default-dict writes on read
     return g
 
 
