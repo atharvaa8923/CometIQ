@@ -200,6 +200,7 @@ class Syllabus(Base):
     filename: Mapped[str | None] = mapped_column(String(300))
     raw_text: Mapped[str] = mapped_column(Text, default="")
     topics: Mapped[list] = mapped_column(JSON, default=list)
+    canvas_course_id: Mapped[str | None] = mapped_column(String(40), index=True)   # imported from this Canvas course
     pilot_approved: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     approved_by: Mapped[str | None] = mapped_column(String(200))   # who approved its use (e.g. instructor / chair)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -440,6 +441,9 @@ class SkillBadge(Base):
     issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     partner: Mapped[str | None] = mapped_column(String(200))      # employer whose sponsored project the student completed
     project_id: Mapped[str | None] = mapped_column(String(32))
+    credentials_assertion_id: Mapped[str | None] = mapped_column(String(80))   # sent to Canvas Credentials (Badgr)
+    credentials_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    credentials_error: Mapped[str | None] = mapped_column(Text)
 
     skill: Mapped[Skill] = relationship(lazy="joined")
     course: Mapped[Course] = relationship(lazy="joined")
@@ -699,6 +703,65 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+# ── Integrations ───────────────────────────────────────────────────────────────
+class UserIdentity(Base):
+    """An external sign-in linked to a CometIQ account (single sign-on). The subject is the identity provider's stable id."""
+    __tablename__ = "user_identities"
+    __table_args__ = (UniqueConstraint("provider", "subject"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    provider: Mapped[str] = mapped_column(String(300))     # the issuer URL
+    subject: Mapped[str] = mapped_column(String(255))
+    netid: Mapped[str | None] = mapped_column(String(80), index=True)
+    email: Mapped[str | None] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CanvasConnection(Base):
+    """A faculty member's authorization for CometIQ to read their Canvas courses. Tokens are encrypted at rest."""
+    __tablename__ = "canvas_connections"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    canvas_user_id: Mapped[str | None] = mapped_column(String(40))
+    canvas_name: Mapped[str | None] = mapped_column(String(200))
+    access_token: Mapped[str] = mapped_column(Text)          # encrypted
+    refresh_token: Mapped[str | None] = mapped_column(Text)  # encrypted
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+class CourseAssignment(Base):
+    """A graded assignment imported from Canvas, with the skills its instructions and rubric ask students to practice."""
+    __tablename__ = "course_assignments"
+    __table_args__ = (UniqueConstraint("syllabus_id", "canvas_id"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    syllabus_id: Mapped[str] = mapped_column(ForeignKey("syllabi.id", ondelete="CASCADE"), index=True)
+    canvas_id: Mapped[str] = mapped_column(String(40))
+    name: Mapped[str] = mapped_column(String(300))
+    points: Mapped[float | None] = mapped_column(Float)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    submission_types: Mapped[list] = mapped_column(JSON, default=list)
+    description: Mapped[str | None] = mapped_column(Text)
+    rubric: Mapped[list] = mapped_column(JSON, default=list)      # [{"criterion", "points", "ratings": [...]}]
+    skills: Mapped[list] = mapped_column(JSON, default=list)      # skill names found in the instructions or rubric
+    graded: Mapped[bool] = mapped_column(Boolean, default=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+class CredentialBadgeClass(Base):
+    """The Canvas Credentials badge class created for one skill at one level, reused for every student."""
+    __tablename__ = "credential_badge_classes"
+    __table_args__ = (UniqueConstraint("org_id", "skill_id", "level"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"))
+    skill_id: Mapped[int] = mapped_column(ForeignKey("skills.id", ondelete="CASCADE"))
+    level: Mapped[str] = mapped_column(String(20))
+    entity_id: Mapped[str] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class IdempotencyKey(Base):
     """A client-chosen key for a write request: a retried or double-clicked submission returns the first response instead
     of acting twice. Kept for a day."""
@@ -736,7 +799,7 @@ _FK_INDEXES = [
     (GapReview, "skill_id"), (GapReview, "reviewer_id"), (CurriculumProposal, "forge_draft_id"), (CurriculumProposal, "author_id"),
     (CurriculumProposal, "base_version_id"), (GapDecision, "skill_id"), (GapDecision, "forge_draft_id"), (GapDecision, "reviewer_id"),
     (GapDecision, "analysis_id"), (ProposalComment, "author_id"), (ProposalReview, "reviewer_id"), (SponsoredProject, "decision_id"),
-    (SponsoredProject, "forge_draft_id"), (SponsoredProject, "skill_id"),
+    (SponsoredProject, "forge_draft_id"), (SponsoredProject, "skill_id"), (CredentialBadgeClass, "skill_id"),
 ]
 for _cls, _col in _FK_INDEXES:
     Index(f"ix_{_cls.__tablename__}_{_col}", getattr(_cls, _col))

@@ -20,4 +20,5 @@ class RegisterIn(BaseModel):
 def user_out(u) -> dict:
     return {"id": u.id, "email": u.email, "full_name": u.full_name, "role": u.role, "company": u.company,
             "email_notifications": u.email_notifications, "consent_version": u.consent_version,
+            "sso": (u.password_hash or "").startswith("!sso:"),
             "org": {"id": u.org.id, "name": u.org.name, "slug": u.org.slug, "plan": u.org.plan}}

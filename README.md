@@ -166,6 +166,13 @@ cd backend && ../.venv/bin/alembic revision --autogenerate -m "describe the chan
 ../.venv/bin/python -m pytest -q   # test_migrations fails if models and migrations disagree
 ```
 
+### University systems
+Sign in with the **UTD NetID** (OpenID Connect: Microsoft Entra ID or Shibboleth), **import syllabi and graded assignments
+from Canvas**, send faculty-verified badges to **Canvas Credentials**, issue every badge as a signed **Open Badges 3.0**
+credential with an **Add to LinkedIn** link, and load the career center's **Handshake** postings. Each is off until
+configured; setup steps for IT, Canvas admins and the career center are in [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
+`backend/scripts/fake_institution.py` runs local stand-ins for trying every flow without real credentials.
+
 ### Production readiness
 Password reset and notification emails, a background job queue for AI work with a per-institution Claude budget, privacy
 controls (consent, data export, account deletion), WCAG 2.1 AA accessibility (axe: 0 violations), monitoring (request IDs,

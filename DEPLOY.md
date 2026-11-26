@@ -69,6 +69,9 @@ backup restore test and pilot setup.
   Unhandled errors and browser errors go to Sentry when `SENTRY_DSN` is set.
 - **Background jobs:** AI analysis, syllabus generation, catalog/syllabus imports and emails run in a database-backed queue
   (`TASK_WORKERS` threads per instance; jobs survive restarts and are claimed once across instances).
+- **University integrations:** single sign-on, Canvas, Canvas Credentials, Open Badges signing and Handshake are set up
+  with environment variables; follow [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md). In production set `SECRETS_KEY`
+  (encrypts Canvas tokens; the Render blueprint generates one) and `OB_SIGNING_KEY` (signs Open Badges).
 - **Scaling:** set `WEB_CONCURRENCY` (uvicorn worker processes, about one per CPU core; the image defaults to 2). Each
   process opens up to `DB_POOL_SIZE + DB_MAX_OVERFLOW` (8 + 12) database connections: keep the total below PostgreSQL's
   `max_connections`. Caches and rate-limit counters are per process; cached views are invalidated across all of them.

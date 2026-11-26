@@ -525,9 +525,10 @@ The 42 tables, grouped by purpose:
 
 ## 10. Testing and quality
 
-- **95 automated tests** cover every module, role permissions, migrations (upgrade with existing data and downgrade), privacy and
+- **117 automated tests** cover every module, role permissions, migrations (upgrade with existing data and downgrade), privacy and
   erasure, versioning and reproducibility, decisions, proposals, the curriculum map, badges and outcomes, search, retention, the
-  error format, rate limits and concurrent submissions. They pass on **SQLite and PostgreSQL 16**.
+  error format, rate limits, concurrent submissions, and the university integrations (single sign-on, Canvas, Canvas
+  Credentials, Open Badges, Handshake) against in-process fakes of the real services. They pass on **SQLite and PostgreSQL 16**.
 - **Property tests** (Hypothesis, 1,500 random cases per rule) check that scores stay within 0–100, that more coverage
   never lowers a score, that a match bonus never exceeds its cap, and that the semester-comparison parts add up to the total.
 - **Load test** (`scripts/load_test.py`): about **104 requests/s** with **0 errors**, p95 0.5 s at 20 users and 1.0 s at 50.
@@ -598,10 +599,11 @@ cometiq/
 | **8. Curriculum and badges** | Pull-request-style curriculum proposals with a change request form, AACSB I/P/M curriculum map, faculty-verified skill badges with public verification, the employer filter, and privacy-safe outcomes. |
 | **9. Management, design and partnerships** | Dean's program scorecard, syllabus copilot, program simulator, skill stacks with employer alerts, employer-sponsored projects with partner badges, and Ask CometIQ (LangGraph agent with citations). |
 | **10. Backend performance and hardening** | Batch loading and cached views (candidate ranking from 4,968 queries to 12); PostgreSQL by default, with constraints, indexes, pool and query timeouts, full-text search and daily retention; property tests; safe concurrent decisions, idempotency keys and a SKIP LOCKED task queue; one error format; per-user rate limits; several worker processes; a load test, 18 → 104 requests/s. |
+| **11. University systems** | UTD NetID single sign-on (OpenID Connect), Canvas import of syllabi and graded assignments with rubrics, faculty-verified badges sent to Canvas Credentials, signed Open Badges 3.0 credentials with public verification and an Add to LinkedIn link, Handshake job postings. Setup guide: [docs/INTEGRATIONS.md](../INTEGRATIONS.md). |
 
-On GitHub, rounds 1–5 are on `main`. Rounds 6–10 are on the branches `faculty-review-pilot`, `decision-records-and-versions`,
-`curriculum-proposals-and-badges`, `scorecard-copilot-simulator-stacks-projects-ask` and `backend-performance`. Each branch builds
-on the previous one, so merging the last one brings in all five.
+On GitHub, rounds 1–5 are on `main`. Rounds 6–11 are on the branches `faculty-review-pilot`, `decision-records-and-versions`,
+`curriculum-proposals-and-badges`, `scorecard-copilot-simulator-stacks-projects-ask`, `backend-performance` and `integrations`.
+Each branch builds on the previous one, so merging the last one brings in all six.
 
 ---
 

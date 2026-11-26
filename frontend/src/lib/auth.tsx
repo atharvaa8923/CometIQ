@@ -4,12 +4,14 @@ import { api, tokenStore } from "./api";
 export type Role = "admin" | "faculty" | "student" | "employer" | "advisor";
 export interface User {
   id: string; email: string; full_name: string; role: Role; company?: string | null; email_notifications?: boolean; consent_version?: string | null;
+  sso?: boolean;   // signed in with single sign-on: no CometIQ password
   org: { id: string; name: string; slug: string; plan: string };
 }
 interface AuthCtx {
   user: User | null; loading: boolean;
   login: (email: string, password: string) => Promise<User>;
   register: (body: Record<string, unknown>) => Promise<User>;
+  signInWithToken: (token: string) => Promise<User>;
   logout: () => void;
 }
 
@@ -29,9 +31,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     finish(await api.post<{ token: string; user: User }>("/auth/login", { email, password })), []);
   const register = useCallback(async (body: Record<string, unknown>) =>
     finish(await api.post<{ token: string; user: User }>("/auth/register", body)), []);
+  const signInWithToken = useCallback(async (token: string) => {
+    tokenStore.set(token);
+    const u = await api.get<User>("/auth/me");
+    setUser(u);
+    return u;
+  }, []);
   const logout = useCallback(() => { tokenStore.clear(); setUser(null); }, []);
 
-  return <Ctx.Provider value={{ user, loading, login, register, logout }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ user, loading, login, register, signInWithToken, logout }}>{children}</Ctx.Provider>;
 }
 
 export const useAuth = () => useContext(Ctx);

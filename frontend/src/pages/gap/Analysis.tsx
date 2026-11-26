@@ -6,6 +6,7 @@ import { api, download, waitForTask } from "../../lib/api";
 import { useApi } from "../../lib/hooks";
 import { STATUS, StatusLegend, StatusTag, type Status } from "../../lib/viz";
 import { TargetSelect } from "./GapHome";
+import { CanvasAssignments } from "./CanvasImport";
 import { ReviewPanel, type Decision, type EvidenceRow, type Review, type ReviewSummary } from "./ReviewPanel";
 import { SampleSelect, type Provenance } from "./Samples";
 
@@ -146,6 +147,7 @@ export default function Analysis() {
         onChange={(reviews, review_summary) => setData({ ...a, reviews, review_summary })}
         decisions={a.decisions} decisionOptions={a.decision_options}
         onDecision={(d) => setData({ ...a, decisions: { ...a.decisions, [d.skill_id]: d } })} />
+      <CanvasAssignments syllabusId={a.syllabus.id} />
 
       <div className="grid gap-6">
         <Card title="What this course already teaches">

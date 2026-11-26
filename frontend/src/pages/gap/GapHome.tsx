@@ -5,6 +5,7 @@ import { Badge, Empty, PageHeader, ScoreBar, Spinner, Tabs } from "../../compone
 import { api } from "../../lib/api";
 import { useApi } from "../../lib/hooks";
 import { useToast } from "../../lib/toast";
+import CanvasImport, { type CanvasStatus } from "./CanvasImport";
 import Jobs from "./Jobs";
 import Market from "./Market";
 import Pilot from "./Pilot";
@@ -15,8 +16,13 @@ interface Syl { id: string; title: string; code: string | null; semester: string
   latest: { id: string; score: number; target: string } | null }
 
 export default function GapHome() {
-  const [tab, setTab] = useState<"syllabi" | "market" | "program" | "jobs" | "samples" | "pilot">(() => (new URLSearchParams(location.search).get("tab") as "pilot") ?? "syllabi");
+  type Tab = "syllabi" | "canvas" | "market" | "program" | "jobs" | "samples" | "pilot";
+  const [tab, setTab] = useState<Tab>(() => {
+    const q = new URLSearchParams(location.search);
+    return q.has("canvas") || q.has("canvas_error") ? "canvas" : (q.get("tab") as Tab) ?? "syllabi";
+  });
   const { data, loading, reload } = useApi<Syl[]>("/gap/syllabi");
+  const canvas = useApi<CanvasStatus>("/canvas/status");
   const toast = useToast();
   const del = async (s: Syl) => {
     if (!confirm(`Delete "${s.title}" and its analyses?`)) return;
@@ -27,7 +33,8 @@ export default function GapHome() {
       <PageHeader icon={<ScanSearch className="h-5 w-5" />} title="CometGap" subtitle="Curriculum–Industry Gap Analysis"
         actions={<Link to="/gap/new" className="btn-primary"><FileUp className="h-4 w-4" />Analyze a syllabus</Link>} />
       <Tabs value={tab} onChange={setTab} tabs={[
-        { id: "syllabi", label: "My syllabi" }, { id: "market", label: "Market demand" },
+        { id: "syllabi", label: "My syllabi" }, ...(canvas.data?.configured ? [{ id: "canvas" as const, label: "Canvas" }] : []),
+        { id: "market", label: "Market demand" },
         { id: "program", label: "Program heatmap" }, { id: "jobs", label: "Job postings" },
         { id: "samples", label: "Job samples" }, { id: "pilot", label: "Pilot review" }]} />
       {tab === "syllabi" && (loading ? <Spinner /> : !data?.length ? (
@@ -62,6 +69,7 @@ export default function GapHome() {
           ))}
         </div>
       ))}
+      {tab === "canvas" && canvas.data?.configured && <CanvasImport status={canvas.data} reloadStatus={canvas.reload} onImported={reload} />}
       {tab === "market" && <Market />}
       {tab === "program" && <ProgramHeatmap />}
       {tab === "jobs" && <Jobs />}

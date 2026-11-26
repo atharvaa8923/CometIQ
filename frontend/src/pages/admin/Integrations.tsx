@@ -4,13 +4,14 @@ import { Badge, Card, Spinner } from "../../components/ui";
 import { api, waitForTask } from "../../lib/api";
 import { useApi } from "../../lib/hooks";
 import { useToast } from "../../lib/toast";
+import InstitutionIntegrations, { type Institution } from "./InstitutionIntegrations";
 
 interface Run { id: number; trigger: string; status: string; results: Record<string, { fetched?: number; added?: number; error?: string; skipped?: boolean } | number>; started_at: string; finished_at: string | null }
 interface Data {
   job_sources: Record<string, { enabled: boolean; detail: string; open_jobs: number }>;
   jobs_by_source: Record<string, number>;
   nightly: { enabled: boolean; hour_utc: number; location: string; expire_days: number };
-  runs: Run[]; ai: { enabled: boolean; model: string }; nebula: { enabled: boolean };
+  runs: Run[]; ai: { enabled: boolean; model: string }; nebula: { enabled: boolean }; institution: Institution;
 }
 const RUN_COLOR: Record<string, string> = { ok: "green", partial: "orange", failed: "red", running: "blue" };
 
@@ -51,11 +52,12 @@ export default function Integrations() {
           </div>
           <p className="mt-3 text-xs text-slate-500">Point an uptime monitor (e.g. UptimeRobot or Better Stack) at <code>/api/health/ready</code>; it returns 503 if the database is unreachable.</p>
         </Card>)}
+      <InstitutionIntegrations data={data.institution} reload={reload} />
       <Card title="Live job market sources" actions={<button className="btn-primary btn-sm" onClick={syncNow} disabled={running}>{running ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}{running ? "Syncing…" : "Sync now"}</button>}>
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {Object.entries(data.job_sources).map(([k, v]) => (
             <div key={k} className="rounded-lg border border-slate-200 p-3 text-sm">
-              <div className="flex items-center justify-between"><span className="font-semibold text-slate-800">{({ github: "GitHub lists", adzuna: "Adzuna", usajobs: "USAJobs" } as Record<string, string>)[k] ?? k}</span>
+              <div className="flex items-center justify-between"><span className="font-semibold text-slate-800">{({ github: "GitHub lists", adzuna: "Adzuna", usajobs: "USAJobs", handshake: "Handshake" } as Record<string, string>)[k] ?? k}</span>
                 {v.enabled ? <span className="chip bg-green-50 text-green-800"><CheckCircle2 className="h-3.5 w-3.5 text-green-600" aria-hidden />On</span> : <span className="chip bg-slate-100 text-slate-600"><XCircle className="h-3.5 w-3.5" aria-hidden />Off</span>}</div>
               <div className="mt-1 text-xs text-slate-500">{v.detail}</div>
               <div className="mt-2 text-xs"><b>{v.open_jobs}</b> open postings</div>

@@ -57,7 +57,7 @@ def run(db: Session, dry_run: bool = False) -> dict[str, int]:
         keep = {jid for ids in db.scalars(select(JobSample.job_ids).where(JobSample.kind == "documented")) for jid in (ids or [])}
         with_apps = select(Application.job_id)
         candidates = [jid for jid in db.scalars(select(Job.id).where(
-            ~Job.is_open, Job.source.in_(SYNCED_SOURCES), Job.posted_at < _ago(s.RETENTION_CLOSED_JOBS_DAYS), Job.id.not_in(with_apps)))
+            ~Job.is_open, Job.source.in_((*SYNCED_SOURCES, "handshake")), Job.posted_at < _ago(s.RETENTION_CLOSED_JOBS_DAYS), Job.id.not_in(with_apps)))
             if jid not in keep]
         out["closed_synced_postings"] = len(candidates)
         if candidates and not dry_run:

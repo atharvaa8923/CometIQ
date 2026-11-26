@@ -98,6 +98,43 @@ class Settings(BaseSettings):
     RETENTION_SYNC_RUNS_DAYS: int = 180
     RETENTION_CLOSED_JOBS_DAYS: int = 365     # closed synced postings without applications and outside documented samples
     RETENTION_UNUSED_SNAPSHOTS_DAYS: int = 30
+    # ── Integrations (all optional; each is off until configured) ──
+    # Secrets saved in the database (Canvas tokens) are encrypted with this key. Production: set it (32+ random chars)
+    # and keep it stable; development derives one from JWT_SECRET.
+    SECRETS_KEY: str = ""
+    # Single sign-on (OpenID Connect): Microsoft Entra ID, or a Shibboleth IdP with the OIDC plugin
+    SSO_ENABLED: bool = False
+    SSO_PROVIDER_NAME: str = "UTD NetID"
+    SSO_ISSUER: str = ""               # e.g. https://login.microsoftonline.com/<tenant-id>/v2.0
+    SSO_CLIENT_ID: str = ""
+    SSO_CLIENT_SECRET: str = ""
+    SSO_SCOPES: str = "openid profile email"
+    SSO_ALLOWED_DOMAINS: str = "utdallas.edu"       # only these email domains may sign in with SSO
+    SSO_NETID_CLAIM: str = "preferred_username"     # NetID = this claim without "@domain"
+    SSO_ROLE_CLAIM: str = "roles"                   # claim with affiliations / app roles / groups (string or list)
+    SSO_ROLE_MAP: str = "faculty:faculty,staff:advisor,advisor:advisor,student:student"   # claim value → CometIQ role (never admin)
+    SSO_DEFAULT_ROLE: str = "student"               # when no mapped value is present
+    SSO_AUTO_PROVISION: bool = True                 # create accounts on first sign-in
+    SSO_REQUIRED: bool = False                      # institutional emails must use SSO (password sign-in refused)
+    SSO_ORG_SLUG: str = ""                          # organization new SSO users join (default: the first one)
+    # Canvas LMS (a Canvas developer key; redirect URI = APP_URL/api/canvas/callback)
+    CANVAS_BASE_URL: str = ""          # e.g. https://<school>.instructure.com
+    CANVAS_CLIENT_ID: str = ""
+    CANVAS_CLIENT_SECRET: str = ""
+    CANVAS_SCOPES: str = ""            # only if the developer key enforces scopes (space-separated, see docs/INTEGRATIONS.md)
+    # Canvas Credentials (Badgr) for sending verified badges back into Canvas
+    CREDENTIALS_BASE_URL: str = "https://api.badgr.io"
+    CREDENTIALS_TOKEN: str = ""
+    CREDENTIALS_ISSUER_ID: str = ""
+    CREDENTIALS_AUTO_SEND: bool = False   # send new badges automatically (otherwise an admin sends them)
+    # Open Badges 3.0 signing key (RSA private key, PEM). Development generates one in backend/.keys/.
+    OB_SIGNING_KEY: str = ""
+    OB_SIGNING_KEY_FILE: str = ""
+    LINKEDIN_ORG_ID: str = ""          # the institution's LinkedIn organization id (optional, links the issuer)
+    # Handshake: import a jobs export (CSV/XLSX) or pull one from a URL nightly
+    HANDSHAKE_FEED_URL: str = ""       # optional URL serving the export (CSV or JSON)
+    HANDSHAKE_FEED_TOKEN: str = ""     # optional bearer token for that URL
+    HANDSHAKE_JOB_URL: str = "https://app.joinhandshake.com/jobs/{id}"   # link to a posting by its Handshake id
     CURRICULUM_APPROVALS: int = 2       # approvals a curriculum proposal needs (author excluded)
     OUTCOME_MIN_COHORT: int = 10        # smallest student group shown in outcome comparisons
 

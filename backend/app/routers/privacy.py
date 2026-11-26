@@ -63,6 +63,12 @@ def collect(db: Session, user: User) -> dict:
     data["posted_jobs"] = [_row(j) for j in db.scalars(select(Job).where(Job.employer_id == uid))]
     data["notifications"] = [_row(n) for n in db.scalars(select(Notification).where(Notification.user_id == uid))]
     data["activity_log"] = [_row(a) for a in db.scalars(select(AuditLog).where(AuditLog.user_id == uid).order_by(AuditLog.id))]
+    from ..models import CanvasConnection, UserIdentity
+
+    data["single_sign_on"] = [_row(i) for i in db.scalars(select(UserIdentity).where(UserIdentity.user_id == uid))]
+    conn = db.get(CanvasConnection, uid)
+    if conn:   # the tokens themselves are secrets, not personal data, and are not exported
+        data["canvas_connection"] = _row(conn, skip=("access_token", "refresh_token"))
     return data
 
 
@@ -98,6 +104,18 @@ def erase(db: Session, user: User) -> None:
     db.execute(update(GapReview).where(GapReview.reviewer_id == uid).values(reviewer_id=None))
     db.execute(update(GapDecision).where(GapDecision.reviewer_id == uid).values(reviewer_id=None, reviewer_name=None))
     db.execute(update(SyllabusVersion).where(SyllabusVersion.created_by == uid).values(created_by=None))
+    # badges already sent to Canvas Credentials are revoked there too (by a background job, after this commit)
+    from ..models import CanvasConnection, UserIdentity
+
+    for aid in db.scalars(select(SkillBadge.credentials_assertion_id).where(SkillBadge.student_id == uid,
+                                                                              SkillBadge.credentials_assertion_id.is_not(None))):
+        db.add(Task(org_id=user.org_id, kind="credentials.revoke", payload={"assertion_id": aid, "reason": "Account deleted"}))
+    db.execute(delete(UserIdentity).where(UserIdentity.user_id == uid))
+    conn = db.get(CanvasConnection, uid)
+    if conn:
+        from ..integrations import canvas
+
+        canvas.disconnect(db, conn)
     db.execute(delete(SkillBadge).where(SkillBadge.student_id == uid))
     db.execute(delete(StackCompletion).where(StackCompletion.student_id == uid))
     db.execute(delete(StackSubscription).where(StackSubscription.employer_id == uid))
@@ -127,7 +145,8 @@ class DeleteIn(BaseModel):
 def delete_account(body: DeleteIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
     if body.confirm.strip().upper() != "DELETE":
         raise HTTPException(400, 'Type DELETE to confirm')
-    if not verify_password(body.password, user.password_hash):
+    sso_only = user.password_hash.startswith("!sso:")   # signed in with single sign-on: no CometIQ password to confirm
+    if not sso_only and not verify_password(body.password, user.password_hash):
         raise HTTPException(400, "Password is incorrect")
     erase(db, user)
     db.commit()

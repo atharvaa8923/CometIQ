@@ -22,6 +22,17 @@ services:
         fromDatabase: { name: cometiq-pilot-db, property: connectionString }
       - key: JWT_SECRET
         generateValue: true
+      - key: SECRETS_KEY              # encrypts stored Canvas tokens; keep it stable
+        generateValue: true
+      # Institution integrations (docs/INTEGRATIONS.md); each stays off until configured
+      - key: SSO_CLIENT_SECRET
+        sync: false
+      - key: CANVAS_CLIENT_SECRET
+        sync: false
+      - key: CREDENTIALS_TOKEN
+        sync: false
+      - key: OB_SIGNING_KEY           # RSA private key (PEM) that signs Open Badges
+        sync: false
       - key: SEED_DEMO
         value: "false"             # no demo accounts, no fictional postings
       - key: PILOT_ROLES

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { KeyRound } from "lucide-react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Logo } from "../components/Logo";
 import { ErrorBox } from "../components/ui";
 import { useAuth } from "../lib/auth";
@@ -40,7 +41,10 @@ export default function Login() {
   const [busy, setBusy] = useState(false);
   const [demo, setDemo] = useState(false);
   const [pilot, setPilot] = useState<string[] | null>(null);
-  useEffect(() => { fetch("/api/auth/public-config").then((r) => r.json()).then((c) => { setDemo(!!c.demo); setPilot(c.pilot_roles ?? null); }).catch(() => setDemo(false)); }, []);
+  const [sso, setSso] = useState<{ enabled: boolean; name: string; required: boolean; domains: string[] } | null>(null);
+  const [params] = useSearchParams();
+  const ssoError = params.get("sso_error");
+  useEffect(() => { fetch("/api/auth/public-config").then((r) => r.json()).then((c) => { setDemo(!!c.demo); setPilot(c.pilot_roles ?? null); setSso(c.sso ?? null); }).catch(() => setDemo(false)); }, []);
 
   const submit = async (e?: React.FormEvent, creds?: [string, string]) => {
     e?.preventDefault();
@@ -53,6 +57,14 @@ export default function Login() {
 
   return (
     <AuthShell title="Sign in to CometIQ">
+      {sso?.enabled && <div className="mb-6 space-y-3">
+        <ErrorBox error={ssoError} />
+        <a href="/api/auth/sso/login?next=/app" className="btn-primary w-full justify-center"><KeyRound className="h-4 w-4" aria-hidden />Sign in with {sso.name}</a>
+        <p className="text-center text-xs text-slate-500">{sso.required
+          ? `${sso.domains.map((d) => "@" + d).join(", ")} accounts sign in with ${sso.name}. The form below is for other accounts, such as employers.`
+          : `Faculty, staff and students can use their ${sso.name}.`}</p>
+        <div className="flex items-center gap-3 text-xs uppercase tracking-wide text-slate-500" aria-hidden><span className="h-px flex-1 bg-slate-200" />or<span className="h-px flex-1 bg-slate-200" /></div>
+      </div>}
       <form onSubmit={submit} className="space-y-4">
         <ErrorBox error={err} />
         {pilot && <p className="rounded-lg bg-comet-50 p-3 text-sm text-comet-800">Faculty pilot: sign-in is limited to {pilot.join(" and ")} accounts.</p>}

@@ -113,3 +113,45 @@ def import_syllabus(db: Session, task: Task) -> dict:
     db.add(syl)
     db.commit()
     return {"syllabus_id": syl.id, **run_analysis(db, syl.id, p.get("target", "auto"), extract=True, task=task, user_id=task.user_id)}
+
+
+@handler("canvas.import_course")
+def canvas_import(db: Session, task: Task) -> dict:
+    from ..integrations import canvas
+    from ..models import User
+
+    user = db.get(User, task.user_id)
+    from .tasks import TaskError
+
+    try:
+        return canvas.import_course(db, user, task.payload["canvas_course_id"], task)
+    except canvas.CanvasError as e:
+        raise TaskError(str(e)) from None
+
+
+@handler("credentials.send")
+def credentials_send(db: Session, task: Task) -> dict:
+    from sqlalchemy import select
+
+    from ..integrations import credentials
+    from ..models import SkillBadge
+
+    ids = task.payload.get("badge_ids")
+    q = select(SkillBadge).where(SkillBadge.org_id == task.org_id, SkillBadge.status == "active", SkillBadge.public,
+                                 SkillBadge.credentials_assertion_id.is_(None))
+    if ids:
+        q = q.where(SkillBadge.id.in_(ids))
+    return credentials.send_many(db, list(db.scalars(q)))
+
+
+@handler("credentials.revoke")
+def credentials_revoke(db: Session, task: Task) -> dict:
+    from ..integrations import credentials
+    from ..models import SkillBadge
+
+    aid = task.payload.get("assertion_id")
+    if not aid and (b := db.get(SkillBadge, task.payload.get("badge_id"))):
+        aid = b.credentials_assertion_id
+    if aid:
+        credentials.revoke_assertion(aid, task.payload.get("reason") or "Revoked by the institution")
+    return {"revoked": aid}

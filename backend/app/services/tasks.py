@@ -19,7 +19,7 @@ from ..models import Task
 
 log = logging.getLogger("cometiq.tasks")
 HANDLERS: dict[str, Callable[[Session, Task], dict | None]] = {}
-RETRYABLE = {"email.send": 3}
+RETRYABLE = {"email.send": 3, "credentials.revoke": 5}   # attempts for tasks that call outside services
 current_org: contextvars.ContextVar[str | None] = contextvars.ContextVar("current_org", default=None)
 _stop = threading.Event()
 
@@ -29,6 +29,10 @@ def handler(kind: str):
         HANDLERS[kind] = fn
         return fn
     return deco
+
+
+class TaskError(Exception):
+    """A failure to show the person as written (e.g. "Connect Canvas again"), not a crash."""
 
 
 def enqueue(db: Session, kind: str, payload: dict, org_id: str | None = None, user_id: str | None = None) -> Task:
@@ -70,7 +74,7 @@ def _claim_and_run(task_id: str, already_claimed: bool = False) -> bool:
             task = db.get(Task, task_id)
             retry = task.attempts < RETRYABLE.get(task.kind, 1)
             task.status = "queued" if retry else "failed"
-            task.error = f"{type(e).__name__}: {e}"[:2000]
+            task.error = f"{type(e).__name__}: {e}"[:2000]   # "TaskError: …" is shown to the person; anything else is not
             log.warning("Task %s (%s) %s: %s", task.id, task.kind, "will retry" if retry else "failed", e)
         finally:
             current_org.reset(token)

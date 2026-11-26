@@ -150,6 +150,7 @@ def out(b: SkillBadge, public: bool = False) -> dict:
                                        "syllabus_version": f.get("syllabus_version"), "confirmed_at": f.get("confirmed_at")}}
     if not public:
         d |= {"public": b.public, "public_token": b.public_token, "revoked_reason": b.revoked_reason,
+              "in_canvas": bool(b.credentials_assertion_id), "canvas_sent_at": b.credentials_sent_at, "canvas_error": b.credentials_error,
               "basis": d["basis"] | {"confirmed_by": f.get("confirmed_by"), "completion_verified_by": c.get("verified_by"),
                                      "completion_verified_at": c.get("verified_at")}}
     return d

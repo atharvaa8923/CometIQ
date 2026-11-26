@@ -27,6 +27,7 @@ import Copilot from "./pages/gap/Copilot";
 import CurriculumHome from "./pages/curriculum/CurriculumHome";
 import Proposal from "./pages/curriculum/Proposal";
 import BadgeVerify from "./pages/BadgeVerify";
+import SsoComplete from "./pages/SsoComplete";
 import Ask from "./pages/Ask";
 
 function Guard({ roles, children }: { roles?: Role[]; children: ReactNode }) {
@@ -46,6 +47,7 @@ export default function App() {
       <Route path="/login" element={user ? <Navigate to="/app" replace /> : <Login />} />
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/badge/:token" element={<BadgeVerify />} />
+      <Route path="/sso/complete" element={<SsoComplete />} />
       <Route path="/terms" element={<Terms />} />
       <Route path="/accessibility" element={<AccessibilityStatement />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
